@@ -79,7 +79,7 @@ export class GridRenderer {
     const visibleColumnCount =
       Math.ceil(
         (this.canvas.clientWidth - GridConfig.rowHeaderWidth) /
-          GridConfig.defaultColumnWidth
+        GridConfig.defaultColumnWidth
       ) + 1;
 
     this.context.font = GridConfig.headerFont;
@@ -138,7 +138,7 @@ export class GridRenderer {
     const visibleRowCount =
       Math.ceil(
         (this.canvas.clientHeight - GridConfig.columnHeaderHeight) /
-          GridConfig.defaultRowHeight
+        GridConfig.defaultRowHeight
       ) + 1;
 
     this.context.font = GridConfig.headerFont;
@@ -194,13 +194,13 @@ export class GridRenderer {
     const visibleRowCount =
       Math.ceil(
         (this.canvas.clientHeight - GridConfig.columnHeaderHeight) /
-          GridConfig.defaultRowHeight
+        GridConfig.defaultRowHeight
       ) + 1;
 
     const visibleColumnCount =
       Math.ceil(
         (this.canvas.clientWidth - GridConfig.rowHeaderWidth) /
-          GridConfig.defaultColumnWidth
+        GridConfig.defaultColumnWidth
       ) + 1;
 
     this.context.font = GridConfig.font;
@@ -257,13 +257,13 @@ export class GridRenderer {
     const visibleRowCount =
       Math.ceil(
         (this.canvas.clientHeight - GridConfig.columnHeaderHeight) /
-          GridConfig.defaultRowHeight
+        GridConfig.defaultRowHeight
       ) + 1;
 
     const visibleColumnCount =
       Math.ceil(
         (this.canvas.clientWidth - GridConfig.rowHeaderWidth) /
-          GridConfig.defaultColumnWidth
+        GridConfig.defaultColumnWidth
       ) + 1;
 
     this.context.strokeStyle = GridConfig.gridLineColor;
@@ -319,10 +319,27 @@ export class GridRenderer {
       return;
     }
 
-    if (selection.type !== "cell") {
+    if (selection.type === "cell") {
+      this.drawCellSelection(scrollX, scrollY, selection);
       return;
     }
 
+    if (selection.type === "row") {
+      this.drawRowSelection(scrollY, selection);
+      return;
+    }
+
+    if (selection.type === "column") {
+      this.drawColumnSelection(scrollX, selection);
+      return;
+    }
+  }
+
+  private drawCellSelection(
+    scrollX: number,
+    scrollY: number,
+    selection: Selection
+  ): void {
     const selectedRow = selection.startRow;
     const selectedColumn = selection.startColumn;
 
@@ -363,6 +380,82 @@ export class GridRenderer {
       cellY + 1,
       GridConfig.defaultColumnWidth - 2,
       GridConfig.defaultRowHeight - 2
+    );
+
+    this.context.lineWidth = 1;
+  }
+
+  private drawRowSelection(scrollY: number, selection: Selection): void {
+    const selectedRow = selection.startRow;
+
+    const rowY =
+      GridConfig.columnHeaderHeight +
+      selectedRow * GridConfig.defaultRowHeight -
+      scrollY;
+
+    const isVisible =
+      rowY + GridConfig.defaultRowHeight >= GridConfig.columnHeaderHeight &&
+      rowY <= this.canvas.clientHeight;
+
+    if (!isVisible) {
+      return;
+    }
+
+    this.context.fillStyle = GridConfig.selectedCellFillColor;
+
+    this.context.fillRect(
+      GridConfig.rowHeaderWidth,
+      rowY,
+      this.canvas.clientWidth - GridConfig.rowHeaderWidth,
+      GridConfig.defaultRowHeight
+    );
+
+    this.context.strokeStyle = GridConfig.selectedCellBorderColor;
+    this.context.lineWidth = 2;
+
+    this.context.strokeRect(
+      GridConfig.rowHeaderWidth + 1,
+      rowY + 1,
+      this.canvas.clientWidth - GridConfig.rowHeaderWidth - 2,
+      GridConfig.defaultRowHeight - 2
+    );
+
+    this.context.lineWidth = 1;
+  }
+
+  private drawColumnSelection(scrollX: number, selection: Selection): void {
+    const selectedColumn = selection.startColumn;
+
+    const columnX =
+      GridConfig.rowHeaderWidth +
+      selectedColumn * GridConfig.defaultColumnWidth -
+      scrollX;
+
+    const isVisible =
+      columnX + GridConfig.defaultColumnWidth >= GridConfig.rowHeaderWidth &&
+      columnX <= this.canvas.clientWidth;
+
+    if (!isVisible) {
+      return;
+    }
+
+    this.context.fillStyle = GridConfig.selectedCellFillColor;
+
+    this.context.fillRect(
+      columnX,
+      GridConfig.columnHeaderHeight,
+      GridConfig.defaultColumnWidth,
+      this.canvas.clientHeight - GridConfig.columnHeaderHeight
+    );
+
+    this.context.strokeStyle = GridConfig.selectedCellBorderColor;
+    this.context.lineWidth = 2;
+
+    this.context.strokeRect(
+      columnX + 1,
+      GridConfig.columnHeaderHeight + 1,
+      GridConfig.defaultColumnWidth - 2,
+      this.canvas.clientHeight - GridConfig.columnHeaderHeight - 2
     );
 
     this.context.lineWidth = 1;

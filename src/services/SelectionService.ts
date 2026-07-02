@@ -1,4 +1,5 @@
 import { Selection } from "../models/Selection";
+import { GridConfig } from "../core/GridConfig";
 
 export class SelectionService {
   private currentSelection: Selection | null;
@@ -13,6 +14,26 @@ export class SelectionService {
       rowIndex,
       columnIndex,
       rowIndex,
+      columnIndex
+    );
+  }
+
+  setRowSelection(rowIndex: number): void {
+    this.currentSelection = new Selection(
+      "row",
+      rowIndex,
+      0,
+      rowIndex,
+      GridConfig.totalColumns - 1
+    );
+  }
+
+  setColumnSelection(columnIndex: number): void {
+    this.currentSelection = new Selection(
+      "column",
+      0,
+      columnIndex,
+      GridConfig.totalRows - 1,
       columnIndex
     );
   }

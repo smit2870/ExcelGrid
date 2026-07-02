@@ -46,18 +46,6 @@ export class Grid {
     });
   }
 
-  private updateStatusBar(rowIndex: number, columnIndex: number): void {
-    if (!this.statusBar) {
-      return;
-    }
-
-    const columnName = CanvasUtils.getColumnName(columnIndex);
-    const rowNumber = rowIndex + 1;
-    const selectedCellName = `${columnName}${rowNumber}`;
-
-    this.statusBar.textContent = `Selected Cell: ${selectedCellName} | Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -`;
-  }
-
   private resizeCanvas(): void {
     const parent = this.canvas.parentElement;
 
@@ -108,30 +96,47 @@ export class Grid {
     const mouseX = mousePosition.x;
     const mouseY = mousePosition.y;
 
-    const isInsideCellArea =
-      mouseX >= GridConfig.rowHeaderWidth &&
-      mouseY >= GridConfig.columnHeaderHeight;
+    const isTopLeftCorner =
+      mouseX < GridConfig.rowHeaderWidth &&
+      mouseY < GridConfig.columnHeaderHeight;
 
-    if (!isInsideCellArea) {
+    if (isTopLeftCorner) {
       this.selectionService.clearSelection();
-
-      if (this.statusBar) {
-        this.statusBar.textContent =
-          "Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -";
-      }
-
+      this.resetStatusBar();
       this.render();
       return;
     }
 
+    const isColumnHeaderClick =
+      mouseX >= GridConfig.rowHeaderWidth &&
+      mouseY < GridConfig.columnHeaderHeight;
+
+    if (isColumnHeaderClick) {
+      this.handleColumnHeaderClick(mouseX);
+      return;
+    }
+
+    const isRowHeaderClick =
+      mouseX < GridConfig.rowHeaderWidth &&
+      mouseY >= GridConfig.columnHeaderHeight;
+
+    if (isRowHeaderClick) {
+      this.handleRowHeaderClick(mouseY);
+      return;
+    }
+
+    this.handleCellClick(mouseX, mouseY);
+  }
+
+  private handleCellClick(mouseX: number, mouseY: number): void {
     const columnIndex = Math.floor(
       (mouseX - GridConfig.rowHeaderWidth + this.scrollX) /
-        GridConfig.defaultColumnWidth
+      GridConfig.defaultColumnWidth
     );
 
     const rowIndex = Math.floor(
       (mouseY - GridConfig.columnHeaderHeight + this.scrollY) /
-        GridConfig.defaultRowHeight
+      GridConfig.defaultRowHeight
     );
 
     const isValidCell =
@@ -145,8 +150,84 @@ export class Grid {
     }
 
     this.selectionService.setCellSelection(rowIndex, columnIndex);
-    this.updateStatusBar(rowIndex, columnIndex);
+    this.updateCellStatusBar(rowIndex, columnIndex);
     this.render();
+  }
+
+  private handleRowHeaderClick(mouseY: number): void {
+    const rowIndex = Math.floor(
+      (mouseY - GridConfig.columnHeaderHeight + this.scrollY) /
+      GridConfig.defaultRowHeight
+    );
+
+    const isValidRow = rowIndex >= 0 && rowIndex < GridConfig.totalRows;
+
+    if (!isValidRow) {
+      return;
+    }
+
+    this.selectionService.setRowSelection(rowIndex);
+    this.updateRowStatusBar(rowIndex);
+    this.render();
+  }
+
+  private handleColumnHeaderClick(mouseX: number): void {
+    const columnIndex = Math.floor(
+      (mouseX - GridConfig.rowHeaderWidth + this.scrollX) /
+      GridConfig.defaultColumnWidth
+    );
+
+    const isValidColumn =
+      columnIndex >= 0 && columnIndex < GridConfig.totalColumns;
+
+    if (!isValidColumn) {
+      return;
+    }
+
+    this.selectionService.setColumnSelection(columnIndex);
+    this.updateColumnStatusBar(columnIndex);
+    this.render();
+  }
+
+  private updateCellStatusBar(rowIndex: number, columnIndex: number): void {
+    if (!this.statusBar) {
+      return;
+    }
+
+    const columnName = CanvasUtils.getColumnName(columnIndex);
+    const rowNumber = rowIndex + 1;
+    const selectedCellName = `${columnName}${rowNumber}`;
+
+    this.statusBar.textContent = `Selected Cell: ${selectedCellName} | Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -`;
+  }
+
+  private updateRowStatusBar(rowIndex: number): void {
+    if (!this.statusBar) {
+      return;
+    }
+
+    const rowNumber = rowIndex + 1;
+
+    this.statusBar.textContent = `Selected Row: ${rowNumber} | Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -`;
+  }
+
+  private updateColumnStatusBar(columnIndex: number): void {
+    if (!this.statusBar) {
+      return;
+    }
+
+    const columnName = CanvasUtils.getColumnName(columnIndex);
+
+    this.statusBar.textContent = `Selected Column: ${columnName} | Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -`;
+  }
+
+  private resetStatusBar(): void {
+    if (!this.statusBar) {
+      return;
+    }
+
+    this.statusBar.textContent =
+      "Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -";
   }
 
   private limitScrollPosition(): void {
