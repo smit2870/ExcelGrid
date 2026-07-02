@@ -1,0 +1,75 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: Arial, Helvetica, sans-serif;
+  overflow: hidden;
+  background-color: #ffffff;
+}
+
+#app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.toolbar {
+  height: 56px;
+  padding: 0 16px;
+  border-bottom: 1px solid #d0d7de;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #f8f9fa;
+}
+
+.toolbar h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.toolbar-actions button {
+  padding: 6px 12px;
+  border: 1px solid #c8c8c8;
+  background-color: #ffffff;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.toolbar-actions button:hover {
+  background-color: #f1f1f1;
+}
+
+.grid-container {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  background-color: #ffffff;
+}
+
+#gridCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: default;
+}
+
+.status-bar {
+  height: 28px;
+  padding: 6px 12px;
+  border-top: 1px solid #d0d7de;
+  font-size: 13px;
+  background-color: #f8f9fa;
+  color: #333333;
+}

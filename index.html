@@ -2,12 +2,30 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>excelgrid</title>
+    <title>Excel Grid View</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div class="toolbar">
+        <h2>Excel Grid View</h2>
+
+        <div class="toolbar-actions">
+          <button id="undoBtn">Undo</button>
+          <button id="redoBtn">Redo</button>
+        </div>
+      </div>
+
+      <div class="grid-container">
+        <canvas id="gridCanvas"></canvas>
+      </div>
+
+      <div id="statusBar" class="status-bar">
+        Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
+``
