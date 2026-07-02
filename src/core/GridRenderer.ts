@@ -1,6 +1,7 @@
 import { GridConfig } from "./GridConfig";
 import { GridDataStore } from "./GridDataStore";
 import { CanvasUtils } from "../utils/CanvasUtils";
+import type { Selection } from "../models/Selection";
 
 export class GridRenderer {
   private canvas: HTMLCanvasElement;
@@ -20,24 +21,36 @@ export class GridRenderer {
     this.context = context;
   }
 
-  render(scrollX: number, scrollY: number): void {
+  render(scrollX: number, scrollY: number, selection: Selection | null): void {
     this.clearCanvas();
 
     this.drawBackground();
-    this.drawColumnHeaders(scrollX);
-    this.drawRowHeaders(scrollY);
     this.drawCells(scrollX, scrollY);
     this.drawGridLines(scrollX, scrollY);
+    this.drawSelection(scrollX, scrollY, selection);
+    this.drawColumnHeaders(scrollX);
+    this.drawRowHeaders(scrollY);
     this.drawTopLeftCorner();
   }
 
   private clearCanvas(): void {
-    this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.context.clearRect(
+      0,
+      0,
+      this.canvas.clientWidth,
+      this.canvas.clientHeight
+    );
   }
 
   private drawBackground(): void {
     this.context.fillStyle = "#ffffff";
-    this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    this.context.fillRect(
+      0,
+      0,
+      this.canvas.clientWidth,
+      this.canvas.clientHeight
+    );
   }
 
   private drawTopLeftCorner(): void {
@@ -73,7 +86,11 @@ export class GridRenderer {
     this.context.textAlign = "center";
     this.context.textBaseline = "middle";
 
-    for (let columnOffset = 0;columnOffset < visibleColumnCount;columnOffset++) {
+    for (
+      let columnOffset = 0;
+      columnOffset < visibleColumnCount;
+      columnOffset++
+    ) {
       const columnIndex = startColumn + columnOffset;
 
       if (columnIndex >= GridConfig.totalColumns) {
@@ -202,7 +219,11 @@ export class GridRenderer {
         rowOffset * GridConfig.defaultRowHeight -
         (scrollY % GridConfig.defaultRowHeight);
 
-      for (let columnOffset = 0; columnOffset < visibleColumnCount; columnOffset++) {
+      for (
+        let columnOffset = 0;
+        columnOffset < visibleColumnCount;
+        columnOffset++
+      ) {
         const columnIndex = startColumn + columnOffset;
 
         if (columnIndex >= GridConfig.totalColumns) {
@@ -266,7 +287,11 @@ export class GridRenderer {
       this.context.stroke();
     }
 
-    for (let columnOffset = 0; columnOffset <= visibleColumnCount; columnOffset++) {
+    for (
+      let columnOffset = 0;
+      columnOffset <= visibleColumnCount;
+      columnOffset++
+    ) {
       const columnIndex = startColumn + columnOffset;
 
       if (columnIndex > GridConfig.totalColumns) {
@@ -283,5 +308,63 @@ export class GridRenderer {
       this.context.lineTo(x, this.canvas.clientHeight);
       this.context.stroke();
     }
+  }
+
+  private drawSelection(
+    scrollX: number,
+    scrollY: number,
+    selection: Selection | null
+  ): void {
+    if (!selection) {
+      return;
+    }
+
+    if (selection.type !== "cell") {
+      return;
+    }
+
+    const selectedRow = selection.startRow;
+    const selectedColumn = selection.startColumn;
+
+    const cellX =
+      GridConfig.rowHeaderWidth +
+      selectedColumn * GridConfig.defaultColumnWidth -
+      scrollX;
+
+    const cellY =
+      GridConfig.columnHeaderHeight +
+      selectedRow * GridConfig.defaultRowHeight -
+      scrollY;
+
+    const isVisible =
+      cellX + GridConfig.defaultColumnWidth >= GridConfig.rowHeaderWidth &&
+      cellX <= this.canvas.clientWidth &&
+      cellY + GridConfig.defaultRowHeight >= GridConfig.columnHeaderHeight &&
+      cellY <= this.canvas.clientHeight;
+
+    if (!isVisible) {
+      return;
+    }
+
+    this.context.fillStyle = GridConfig.selectedCellFillColor;
+
+    this.context.fillRect(
+      cellX,
+      cellY,
+      GridConfig.defaultColumnWidth,
+      GridConfig.defaultRowHeight
+    );
+
+    this.context.strokeStyle = GridConfig.selectedCellBorderColor;
+    this.context.lineWidth = 2;
+
+    this.context.strokeRect(
+      cellX + 1,
+      cellY + 1,
+      GridConfig.defaultColumnWidth - 2,
+      GridConfig.defaultRowHeight - 2
+    );
+
+    this.context.lineWidth = 1;
   }
 }
