@@ -15,11 +15,19 @@ export class Grid {
   private scrollX: number;
   private scrollY: number;
 
+  private isSelectingRange: boolean;
+  private rangeStartRow: number;
+  private rangeStartColumn: number;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
 
     this.scrollX = 0;
     this.scrollY = 0;
+
+    this.isSelectingRange = false;
+    this.rangeStartRow = 0;
+    this.rangeStartColumn = 0;
 
     this.statusBar = document.getElementById("statusBar");
 
@@ -88,6 +96,14 @@ export class Grid {
     this.canvas.addEventListener("mousedown", (event: MouseEvent) => {
       this.handleMouseDown(event);
     });
+
+    this.canvas.addEventListener("mousemove", (event: MouseEvent) => {
+      this.handleMouseMove(event);
+    });
+
+    window.addEventListener("mouseup", () => {
+      this.handleMouseUp();
+    });
   }
 
   private handleMouseDown(event: MouseEvent): void {
@@ -125,18 +141,86 @@ export class Grid {
       return;
     }
 
-    this.handleCellClick(mouseX, mouseY);
+    this.startRangeSelection(mouseX, mouseY);
   }
 
-  private handleCellClick(mouseX: number, mouseY: number): void {
+  private handleMouseMove(event: MouseEvent): void {
+    if (!this.isSelectingRange) {
+      return;
+    }
+
+    const mousePosition = CanvasUtils.getMousePosition(this.canvas, event);
+
+    const mouseX = mousePosition.x;
+    const mouseY = mousePosition.y;
+
+    const cellPosition = this.getCellPositionFromMouse(mouseX, mouseY);
+
+    if (!cellPosition) {
+      return;
+    }
+
+    this.selectionService.setRangeSelection(
+      this.rangeStartRow,
+      this.rangeStartColumn,
+      cellPosition.rowIndex,
+      cellPosition.columnIndex
+    );
+
+    this.updateRangeStatusBar(
+      this.rangeStartRow,
+      this.rangeStartColumn,
+      cellPosition.rowIndex,
+      cellPosition.columnIndex
+    );
+
+    this.render();
+  }
+
+  private handleMouseUp(): void {
+    this.isSelectingRange = false;
+  }
+
+  private startRangeSelection(mouseX: number, mouseY: number): void {
+    const cellPosition = this.getCellPositionFromMouse(mouseX, mouseY);
+
+    if (!cellPosition) {
+      return;
+    }
+
+    this.isSelectingRange = true;
+    this.rangeStartRow = cellPosition.rowIndex;
+    this.rangeStartColumn = cellPosition.columnIndex;
+
+    this.selectionService.setCellSelection(
+      cellPosition.rowIndex,
+      cellPosition.columnIndex
+    );
+
+    this.updateCellStatusBar(cellPosition.rowIndex, cellPosition.columnIndex);
+    this.render();
+  }
+
+  private getCellPositionFromMouse(
+    mouseX: number,
+    mouseY: number
+  ): { rowIndex: number; columnIndex: number } | null {
+    const isInsideCellArea =
+      mouseX >= GridConfig.rowHeaderWidth &&
+      mouseY >= GridConfig.columnHeaderHeight;
+
+    if (!isInsideCellArea) {
+      return null;
+    }
+
     const columnIndex = Math.floor(
       (mouseX - GridConfig.rowHeaderWidth + this.scrollX) /
-      GridConfig.defaultColumnWidth
+        GridConfig.defaultColumnWidth
     );
 
     const rowIndex = Math.floor(
       (mouseY - GridConfig.columnHeaderHeight + this.scrollY) /
-      GridConfig.defaultRowHeight
+        GridConfig.defaultRowHeight
     );
 
     const isValidCell =
@@ -146,18 +230,19 @@ export class Grid {
       columnIndex < GridConfig.totalColumns;
 
     if (!isValidCell) {
-      return;
+      return null;
     }
 
-    this.selectionService.setCellSelection(rowIndex, columnIndex);
-    this.updateCellStatusBar(rowIndex, columnIndex);
-    this.render();
+    return {
+      rowIndex,
+      columnIndex
+    };
   }
 
   private handleRowHeaderClick(mouseY: number): void {
     const rowIndex = Math.floor(
       (mouseY - GridConfig.columnHeaderHeight + this.scrollY) /
-      GridConfig.defaultRowHeight
+        GridConfig.defaultRowHeight
     );
 
     const isValidRow = rowIndex >= 0 && rowIndex < GridConfig.totalRows;
@@ -166,6 +251,7 @@ export class Grid {
       return;
     }
 
+    this.isSelectingRange = false;
     this.selectionService.setRowSelection(rowIndex);
     this.updateRowStatusBar(rowIndex);
     this.render();
@@ -174,7 +260,7 @@ export class Grid {
   private handleColumnHeaderClick(mouseX: number): void {
     const columnIndex = Math.floor(
       (mouseX - GridConfig.rowHeaderWidth + this.scrollX) /
-      GridConfig.defaultColumnWidth
+        GridConfig.defaultColumnWidth
     );
 
     const isValidColumn =
@@ -184,6 +270,7 @@ export class Grid {
       return;
     }
 
+    this.isSelectingRange = false;
     this.selectionService.setColumnSelection(columnIndex);
     this.updateColumnStatusBar(columnIndex);
     this.render();
@@ -219,6 +306,32 @@ export class Grid {
     const columnName = CanvasUtils.getColumnName(columnIndex);
 
     this.statusBar.textContent = `Selected Column: ${columnName} | Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -`;
+  }
+
+  private updateRangeStatusBar(
+    startRow: number,
+    startColumn: number,
+    endRow: number,
+    endColumn: number
+  ): void {
+    if (!this.statusBar) {
+      return;
+    }
+
+    const normalizedStartRow = Math.min(startRow, endRow);
+    const normalizedEndRow = Math.max(startRow, endRow);
+    const normalizedStartColumn = Math.min(startColumn, endColumn);
+    const normalizedEndColumn = Math.max(startColumn, endColumn);
+
+    const startCellName = `${CanvasUtils.getColumnName(
+      normalizedStartColumn
+    )}${normalizedStartRow + 1}`;
+
+    const endCellName = `${CanvasUtils.getColumnName(normalizedEndColumn)}${
+      normalizedEndRow + 1
+    }`;
+
+    this.statusBar.textContent = `Selected Range: ${startCellName}:${endCellName} | Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -`;
   }
 
   private resetStatusBar(): void {

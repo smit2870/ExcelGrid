@@ -333,6 +333,10 @@ export class GridRenderer {
       this.drawColumnSelection(scrollX, selection);
       return;
     }
+
+    if (selection.type === "range") {
+      this.drawRangeSelection(scrollX, scrollY, selection);
+    }
   }
 
   private drawCellSelection(
@@ -456,6 +460,73 @@ export class GridRenderer {
       GridConfig.columnHeaderHeight + 1,
       GridConfig.defaultColumnWidth - 2,
       this.canvas.clientHeight - GridConfig.columnHeaderHeight - 2
+    );
+
+    this.context.lineWidth = 1;
+  }
+
+  private drawRangeSelection(
+    scrollX: number,
+    scrollY: number,
+    selection: Selection
+  ): void {
+    const startRow = Math.min(selection.startRow, selection.endRow);
+    const endRow = Math.max(selection.startRow, selection.endRow);
+    const startColumn = Math.min(selection.startColumn, selection.endColumn);
+    const endColumn = Math.max(selection.startColumn, selection.endColumn);
+
+    const rangeX =
+      GridConfig.rowHeaderWidth +
+      startColumn * GridConfig.defaultColumnWidth -
+      scrollX;
+
+    const rangeY =
+      GridConfig.columnHeaderHeight +
+      startRow * GridConfig.defaultRowHeight -
+      scrollY;
+
+    const rangeWidth =
+      (endColumn - startColumn + 1) * GridConfig.defaultColumnWidth;
+
+    const rangeHeight =
+      (endRow - startRow + 1) * GridConfig.defaultRowHeight;
+
+    const isVisible =
+      rangeX + rangeWidth >= GridConfig.rowHeaderWidth &&
+      rangeX <= this.canvas.clientWidth &&
+      rangeY + rangeHeight >= GridConfig.columnHeaderHeight &&
+      rangeY <= this.canvas.clientHeight;
+
+    if (!isVisible) {
+      return;
+    }
+
+    const visibleX = Math.max(rangeX, GridConfig.rowHeaderWidth);
+    const visibleY = Math.max(rangeY, GridConfig.columnHeaderHeight);
+
+    const visibleRight = Math.min(rangeX + rangeWidth, this.canvas.clientWidth);
+    const visibleBottom = Math.min(rangeY + rangeHeight, this.canvas.clientHeight);
+
+    const visibleWidth = visibleRight - visibleX;
+    const visibleHeight = visibleBottom - visibleY;
+
+    this.context.fillStyle = GridConfig.selectedCellFillColor;
+
+    this.context.fillRect(
+      visibleX,
+      visibleY,
+      visibleWidth,
+      visibleHeight
+    );
+
+    this.context.strokeStyle = GridConfig.selectedCellBorderColor;
+    this.context.lineWidth = 2;
+
+    this.context.strokeRect(
+      visibleX + 1,
+      visibleY + 1,
+      visibleWidth - 2,
+      visibleHeight - 2
     );
 
     this.context.lineWidth = 1;

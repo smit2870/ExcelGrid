@@ -38,6 +38,21 @@ export class SelectionService {
     );
   }
 
+  setRangeSelection(
+    startRow: number,
+    startColumn: number,
+    endRow: number,
+    endColumn: number
+  ): void {
+    this.currentSelection = new Selection(
+      "range",
+      startRow,
+      startColumn,
+      endRow,
+      endColumn
+    );
+  }
+
   getSelection(): Selection | null {
     return this.currentSelection;
   }
