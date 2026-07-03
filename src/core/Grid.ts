@@ -11,6 +11,7 @@ export class Grid {
   private renderer: GridRenderer;
   private selectionService: SelectionService;
   private statusBar: HTMLElement | null;
+  private cellEditor: HTMLInputElement | null;
 
   private scrollX: number;
   private scrollY: number;
@@ -18,6 +19,9 @@ export class Grid {
   private isSelectingRange: boolean;
   private rangeStartRow: number;
   private rangeStartColumn: number;
+
+  private editingRow: number | null;
+  private editingColumn: number | null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -29,7 +33,13 @@ export class Grid {
     this.rangeStartRow = 0;
     this.rangeStartColumn = 0;
 
+    this.editingRow = null;
+    this.editingColumn = null;
+
     this.statusBar = document.getElementById("statusBar");
+    this.cellEditor = document.getElementById(
+      "cellEditor"
+    ) as HTMLInputElement | null;
 
     this.dataStore = new GridDataStore(
       GridConfig.defaultRowHeight,
@@ -50,6 +60,7 @@ export class Grid {
 
     window.addEventListener("resize", () => {
       this.resizeCanvas();
+      this.hideCellEditor();
       this.render();
     });
   }
@@ -86,6 +97,8 @@ export class Grid {
     this.canvas.addEventListener("wheel", (event: WheelEvent) => {
       event.preventDefault();
 
+      this.hideCellEditor();
+
       this.scrollX += event.deltaX;
       this.scrollY += event.deltaY;
 
@@ -101,9 +114,23 @@ export class Grid {
       this.handleMouseMove(event);
     });
 
+    this.canvas.addEventListener("dblclick", (event: MouseEvent) => {
+      this.handleDoubleClick(event);
+    });
+
     window.addEventListener("mouseup", () => {
       this.handleMouseUp();
     });
+
+    if (this.cellEditor) {
+      this.cellEditor.addEventListener("keydown", (event: KeyboardEvent) => {
+        this.handleEditorKeyDown(event);
+      });
+
+      this.cellEditor.addEventListener("blur", () => {
+        this.saveCellEditorValue();
+      });
+    }
   }
 
   private handleMouseDown(event: MouseEvent): void {
@@ -119,6 +146,7 @@ export class Grid {
     if (isTopLeftCorner) {
       this.selectionService.clearSelection();
       this.resetStatusBar();
+      this.hideCellEditor();
       this.render();
       return;
     }
@@ -128,6 +156,7 @@ export class Grid {
       mouseY < GridConfig.columnHeaderHeight;
 
     if (isColumnHeaderClick) {
+      this.hideCellEditor();
       this.handleColumnHeaderClick(mouseX);
       return;
     }
@@ -137,10 +166,12 @@ export class Grid {
       mouseY >= GridConfig.columnHeaderHeight;
 
     if (isRowHeaderClick) {
+      this.hideCellEditor();
       this.handleRowHeaderClick(mouseY);
       return;
     }
 
+    this.hideCellEditor();
     this.startRangeSelection(mouseX, mouseY);
   }
 
@@ -179,6 +210,28 @@ export class Grid {
 
   private handleMouseUp(): void {
     this.isSelectingRange = false;
+  }
+
+  private handleDoubleClick(event: MouseEvent): void {
+    const mousePosition = CanvasUtils.getMousePosition(this.canvas, event);
+    const cellPosition = this.getCellPositionFromMouse(
+      mousePosition.x,
+      mousePosition.y
+    );
+
+    if (!cellPosition) {
+      return;
+    }
+
+    this.selectionService.setCellSelection(
+      cellPosition.rowIndex,
+      cellPosition.columnIndex
+    );
+
+    this.updateCellStatusBar(cellPosition.rowIndex, cellPosition.columnIndex);
+    this.render();
+
+    this.showCellEditor(cellPosition.rowIndex, cellPosition.columnIndex);
   }
 
   private startRangeSelection(mouseX: number, mouseY: number): void {
@@ -237,6 +290,100 @@ export class Grid {
       rowIndex,
       columnIndex
     };
+  }
+
+  private showCellEditor(rowIndex: number, columnIndex: number): void {
+    if (!this.cellEditor) {
+      return;
+    }
+
+    const cellX =
+      GridConfig.rowHeaderWidth +
+      columnIndex * GridConfig.defaultColumnWidth -
+      this.scrollX;
+
+    const cellY =
+      GridConfig.columnHeaderHeight +
+      rowIndex * GridConfig.defaultRowHeight -
+      this.scrollY;
+
+    const isVisible =
+      cellX + GridConfig.defaultColumnWidth >= GridConfig.rowHeaderWidth &&
+      cellX <= this.canvas.clientWidth &&
+      cellY + GridConfig.defaultRowHeight >= GridConfig.columnHeaderHeight &&
+      cellY <= this.canvas.clientHeight;
+
+    if (!isVisible) {
+      return;
+    }
+
+    const currentValue = this.dataStore.getCellValue(rowIndex, columnIndex);
+
+    this.editingRow = rowIndex;
+    this.editingColumn = columnIndex;
+
+    this.cellEditor.value = currentValue === null ? "" : String(currentValue);
+
+    this.cellEditor.style.display = "block";
+    this.cellEditor.style.left = `${cellX}px`;
+    this.cellEditor.style.top = `${cellY}px`;
+    this.cellEditor.style.width = `${GridConfig.defaultColumnWidth}px`;
+    this.cellEditor.style.height = `${GridConfig.defaultRowHeight}px`;
+
+    this.cellEditor.focus();
+    this.cellEditor.select();
+  }
+
+  private hideCellEditor(): void {
+    if (!this.cellEditor) {
+      return;
+    }
+
+    this.cellEditor.style.display = "none";
+    this.editingRow = null;
+    this.editingColumn = null;
+  }
+
+  private saveCellEditorValue(): void {
+    if (!this.cellEditor) {
+      return;
+    }
+
+    if (this.editingRow === null || this.editingColumn === null) {
+      return;
+    }
+
+    const newValue = this.cellEditor.value.trim();
+
+    if (newValue === "") {
+      this.dataStore.clearCellValue(this.editingRow, this.editingColumn);
+    } else {
+      const numericValue = Number(newValue);
+      const valueToSave = Number.isNaN(numericValue) ? newValue : numericValue;
+
+      this.dataStore.setCellValue(
+        this.editingRow,
+        this.editingColumn,
+        valueToSave
+      );
+    }
+
+    this.hideCellEditor();
+    this.render();
+  }
+
+  private handleEditorKeyDown(event: KeyboardEvent): void {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      this.saveCellEditorValue();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      this.hideCellEditor();
+      this.render();
+    }
   }
 
   private handleRowHeaderClick(mouseY: number): void {
