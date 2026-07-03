@@ -7,6 +7,7 @@ import { CanvasUtils } from "../utils/CanvasUtils";
 import { CommandManager } from "../commands/CommandManager";
 import { EditCellCommand } from "../commands/EditCellCommand";
 import { ResizeColumnCommand } from "../commands/ResizeColumnCommand";
+import { ResizeRowCommand } from "../commands/ResizeRowCommand";
 import type { CellValue } from "./GridDataStore";
 
 export class Grid {
@@ -33,6 +34,11 @@ export class Grid {
   private resizingStartX: number;
   private resizingStartWidth: number;
 
+  private isResizingRow: boolean;
+  private resizingRowIndex: number | null;
+  private resizingStartY: number;
+  private resizingStartHeight: number;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
 
@@ -50,6 +56,11 @@ export class Grid {
     this.resizingColumnIndex = null;
     this.resizingStartX = 0;
     this.resizingStartWidth = 0;
+
+    this.isResizingRow = false;
+    this.resizingRowIndex = null;
+    this.resizingStartY = 0;
+    this.resizingStartHeight = 0;
 
     this.statusBar = document.getElementById("statusBar");
     this.cellEditor = document.getElementById(
@@ -215,6 +226,13 @@ export class Grid {
       return;
     }
 
+    const resizeRowIndex = this.getRowResizeIndex(mouseX, mouseY);
+
+    if (resizeRowIndex !== null) {
+      this.startRowResize(resizeRowIndex, mouseY);
+      return;
+    }
+
     const isTopLeftCorner =
       mouseX < GridConfig.rowHeaderWidth &&
       mouseY < GridConfig.columnHeaderHeight;
@@ -262,10 +280,18 @@ export class Grid {
       return;
     }
 
+    if (this.isResizingRow) {
+      this.updateRowResize(mouseY);
+      return;
+    }
+
     const resizeColumnIndex = this.getColumnResizeIndex(mouseX, mouseY);
+    const resizeRowIndex = this.getRowResizeIndex(mouseX, mouseY);
 
     if (resizeColumnIndex !== null) {
       this.canvas.style.cursor = "col-resize";
+    } else if (resizeRowIndex !== null) {
+      this.canvas.style.cursor = "row-resize";
     } else {
       this.canvas.style.cursor = "default";
     }
@@ -300,6 +326,11 @@ export class Grid {
   private handleMouseUp(): void {
     if (this.isResizingColumn) {
       this.finishColumnResize();
+      return;
+    }
+
+    if (this.isResizingRow) {
+      this.finishRowResize();
       return;
     }
 
@@ -364,6 +395,64 @@ export class Grid {
     this.updateCellEditorPosition();
   }
 
+  private startRowResize(rowIndex: number, mouseY: number): void {
+    this.commitCellEditor();
+
+    this.isResizingRow = true;
+    this.resizingRowIndex = rowIndex;
+    this.resizingStartY = mouseY;
+    this.resizingStartHeight = this.dataStore.getRowHeight(rowIndex);
+
+    this.canvas.style.cursor = "row-resize";
+  }
+
+  private updateRowResize(mouseY: number): void {
+    if (!this.isResizingRow || this.resizingRowIndex === null) {
+      return;
+    }
+
+    const deltaY = mouseY - this.resizingStartY;
+
+    const newHeight = Math.max(
+      GridConfig.minRowHeight,
+      this.resizingStartHeight + deltaY
+    );
+
+    this.dataStore.setRowHeight(this.resizingRowIndex, newHeight);
+    this.limitScrollPosition();
+    this.render();
+    this.updateCellEditorPosition();
+  }
+
+  private finishRowResize(): void {
+    if (!this.isResizingRow || this.resizingRowIndex === null) {
+      return;
+    }
+
+    const newHeight = this.dataStore.getRowHeight(this.resizingRowIndex);
+    const oldHeight = this.resizingStartHeight;
+
+    if (newHeight !== oldHeight) {
+      const command = new ResizeRowCommand(
+        this.dataStore,
+        this.resizingRowIndex,
+        oldHeight,
+        newHeight
+      );
+
+      this.commandManager.execute(command);
+    }
+
+    this.isResizingRow = false;
+    this.resizingRowIndex = null;
+    this.resizingStartY = 0;
+    this.resizingStartHeight = 0;
+
+    this.canvas.style.cursor = "default";
+    this.render();
+    this.updateCellEditorPosition();
+  }
+
   private getColumnResizeIndex(mouseX: number, mouseY: number): number | null {
     if (mouseY > GridConfig.columnHeaderHeight) {
       return null;
@@ -384,16 +473,43 @@ export class Grid {
       const columnWidth = this.dataStore.getColumnWidth(columnIndex);
       const columnRightEdge = currentX + columnWidth;
 
-      const isNearRightEdge =
-        Math.abs(mouseX - columnRightEdge) <= resizeThreshold;
-
-      if (isNearRightEdge) {
+      if (Math.abs(mouseX - columnRightEdge) <= resizeThreshold) {
         return columnIndex;
       }
 
       currentX += columnWidth;
 
       if (currentX > this.canvas.clientWidth + resizeThreshold) {
+        break;
+      }
+    }
+
+    return null;
+  }
+
+  private getRowResizeIndex(mouseX: number, mouseY: number): number | null {
+    if (mouseX > GridConfig.rowHeaderWidth) {
+      return null;
+    }
+
+    if (mouseY < GridConfig.columnHeaderHeight) {
+      return null;
+    }
+
+    const resizeThreshold = 5;
+    let currentY = GridConfig.columnHeaderHeight - this.scrollY;
+
+    for (let rowIndex = 0; rowIndex < GridConfig.totalRows; rowIndex++) {
+      const rowHeight = this.dataStore.getRowHeight(rowIndex);
+      const rowBottomEdge = currentY + rowHeight;
+
+      if (Math.abs(mouseY - rowBottomEdge) <= resizeThreshold) {
+        return rowIndex;
+      }
+
+      currentY += rowHeight;
+
+      if (currentY > this.canvas.clientHeight + resizeThreshold) {
         break;
       }
     }
@@ -422,6 +538,30 @@ export class Grid {
       currentX += columnWidth;
 
       if (currentX > this.canvas.clientWidth) {
+        break;
+      }
+    }
+
+    return null;
+  }
+
+  private getRowIndexFromMouseY(mouseY: number): number | null {
+    if (mouseY < GridConfig.columnHeaderHeight) {
+      return null;
+    }
+
+    let currentY = GridConfig.columnHeaderHeight - this.scrollY;
+
+    for (let rowIndex = 0; rowIndex < GridConfig.totalRows; rowIndex++) {
+      const rowHeight = this.dataStore.getRowHeight(rowIndex);
+
+      if (mouseY >= currentY && mouseY <= currentY + rowHeight) {
+        return rowIndex;
+      }
+
+      currentY += rowHeight;
+
+      if (currentY > this.canvas.clientHeight) {
         break;
       }
     }
@@ -485,15 +625,11 @@ export class Grid {
     }
 
     const columnIndex = this.getColumnIndexFromMouseX(mouseX);
+    const rowIndex = this.getRowIndexFromMouseY(mouseY);
 
-    if (columnIndex === null) {
+    if (columnIndex === null || rowIndex === null) {
       return null;
     }
-
-    const rowIndex = Math.floor(
-      (mouseY - GridConfig.columnHeaderHeight + this.scrollY) /
-        GridConfig.defaultRowHeight
-    );
 
     const isValidCell =
       rowIndex >= 0 &&
@@ -517,21 +653,19 @@ export class Grid {
     }
 
     const columnBounds = this.getColumnBounds(columnIndex);
+    const rowBounds = this.getRowBounds(rowIndex);
 
-    if (!columnBounds) {
+    if (!columnBounds || !rowBounds) {
       return;
     }
 
     const cellX = columnBounds.x;
-    const cellY =
-      GridConfig.columnHeaderHeight +
-      rowIndex * GridConfig.defaultRowHeight -
-      this.scrollY;
+    const cellY = rowBounds.y;
 
     const isVisible =
       cellX + columnBounds.width >= GridConfig.rowHeaderWidth &&
       cellX <= this.canvas.clientWidth &&
-      cellY + GridConfig.defaultRowHeight >= GridConfig.columnHeaderHeight &&
+      cellY + rowBounds.height >= GridConfig.columnHeaderHeight &&
       cellY <= this.canvas.clientHeight;
 
     if (!isVisible) {
@@ -552,7 +686,7 @@ export class Grid {
     this.cellEditor.style.left = `${cellX}px`;
     this.cellEditor.style.top = `${cellY}px`;
     this.cellEditor.style.width = `${columnBounds.width}px`;
-    this.cellEditor.style.height = `${GridConfig.defaultRowHeight}px`;
+    this.cellEditor.style.height = `${rowBounds.height}px`;
 
     this.cellEditor.focus();
     this.cellEditor.select();
@@ -568,21 +702,19 @@ export class Grid {
     }
 
     const columnBounds = this.getColumnBounds(this.editingColumn);
+    const rowBounds = this.getRowBounds(this.editingRow);
 
-    if (!columnBounds) {
+    if (!columnBounds || !rowBounds) {
       return;
     }
 
     const cellX = columnBounds.x;
-    const cellY =
-      GridConfig.columnHeaderHeight +
-      this.editingRow * GridConfig.defaultRowHeight -
-      this.scrollY;
+    const cellY = rowBounds.y;
 
     const isVisible =
       cellX + columnBounds.width >= GridConfig.rowHeaderWidth &&
       cellX <= this.canvas.clientWidth &&
-      cellY + GridConfig.defaultRowHeight >= GridConfig.columnHeaderHeight &&
+      cellY + rowBounds.height >= GridConfig.columnHeaderHeight &&
       cellY <= this.canvas.clientHeight;
 
     if (!isVisible) {
@@ -608,7 +740,7 @@ export class Grid {
     this.cellEditor.style.left = `${cellX}px`;
     this.cellEditor.style.top = `${cellY}px`;
     this.cellEditor.style.width = `${columnBounds.width}px`;
-    this.cellEditor.style.height = `${GridConfig.defaultRowHeight}px`;
+    this.cellEditor.style.height = `${rowBounds.height}px`;
 
     if (document.activeElement !== this.cellEditor) {
       this.cellEditor.focus();
@@ -636,6 +768,27 @@ export class Grid {
     return {
       x,
       width
+    };
+  }
+
+  private getRowBounds(
+    rowIndex: number
+  ): { y: number; height: number } | null {
+    if (rowIndex < 0 || rowIndex >= GridConfig.totalRows) {
+      return null;
+    }
+
+    let y = GridConfig.columnHeaderHeight - this.scrollY;
+
+    for (let index = 0; index < rowIndex; index++) {
+      y += this.dataStore.getRowHeight(index);
+    }
+
+    const height = this.dataStore.getRowHeight(rowIndex);
+
+    return {
+      y,
+      height
     };
   }
 
@@ -722,14 +875,9 @@ export class Grid {
   }
 
   private handleRowHeaderClick(mouseY: number): void {
-    const rowIndex = Math.floor(
-      (mouseY - GridConfig.columnHeaderHeight + this.scrollY) /
-        GridConfig.defaultRowHeight
-    );
+    const rowIndex = this.getRowIndexFromMouseY(mouseY);
 
-    const isValidRow = rowIndex >= 0 && rowIndex < GridConfig.totalRows;
-
-    if (!isValidRow) {
+    if (rowIndex === null) {
       return;
     }
 
@@ -743,13 +891,6 @@ export class Grid {
     const columnIndex = this.getColumnIndexFromMouseX(mouseX);
 
     if (columnIndex === null) {
-      return;
-    }
-
-    const isValidColumn =
-      columnIndex >= 0 && columnIndex < GridConfig.totalColumns;
-
-    if (!isValidColumn) {
       return;
     }
 
@@ -840,6 +981,16 @@ export class Grid {
     return totalWidth;
   }
 
+  private getTotalRowsHeight(): number {
+    let totalHeight = 0;
+
+    for (let rowIndex = 0; rowIndex < GridConfig.totalRows; rowIndex++) {
+      totalHeight += this.dataStore.getRowHeight(rowIndex);
+    }
+
+    return totalHeight;
+  }
+
   private limitScrollPosition(): void {
     const maxScrollX = Math.max(
       0,
@@ -850,7 +1001,7 @@ export class Grid {
 
     const maxScrollY = Math.max(
       0,
-      GridConfig.totalRows * GridConfig.defaultRowHeight -
+      this.getTotalRowsHeight() -
         this.canvas.clientHeight +
         GridConfig.columnHeaderHeight
     );
