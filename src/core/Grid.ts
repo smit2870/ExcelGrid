@@ -59,9 +59,9 @@ export class Grid {
     this.resizeCanvas();
 
     window.addEventListener("resize", () => {
-      this.commitCellEditor();
       this.resizeCanvas();
       this.render();
+      this.updateCellEditorPosition();
     });
   }
 
@@ -94,17 +94,20 @@ export class Grid {
   }
 
   private attachEvents(): void {
-    this.canvas.addEventListener("wheel", (event: WheelEvent) => {
-      event.preventDefault();
+    const gridContainer = this.canvas.parentElement;
 
-      this.commitCellEditor();
+    if (gridContainer) {
+      gridContainer.addEventListener("wheel", (event: WheelEvent) => {
+        event.preventDefault();
 
-      this.scrollX += event.deltaX;
-      this.scrollY += event.deltaY;
+        this.scrollX += event.deltaX;
+        this.scrollY += event.deltaY;
 
-      this.limitScrollPosition();
-      this.render();
-    });
+        this.limitScrollPosition();
+        this.render();
+        this.updateCellEditorPosition();
+      });
+    }
 
     this.canvas.addEventListener("mousedown", (event: MouseEvent) => {
       this.handleMouseDown(event);
@@ -125,10 +128,6 @@ export class Grid {
     if (this.cellEditor) {
       this.cellEditor.addEventListener("keydown", (event: KeyboardEvent) => {
         this.handleEditorKeyDown(event);
-      });
-
-      this.cellEditor.addEventListener("blur", () => {
-        this.saveCellEditorValue();
       });
     }
   }
@@ -326,6 +325,7 @@ export class Grid {
     this.cellEditor.value = currentValue === null ? "" : String(currentValue);
 
     this.cellEditor.style.display = "block";
+    this.cellEditor.style.visibility = "visible";
     this.cellEditor.style.left = `${cellX}px`;
     this.cellEditor.style.top = `${cellY}px`;
     this.cellEditor.style.width = `${GridConfig.defaultColumnWidth}px`;
@@ -335,22 +335,58 @@ export class Grid {
     this.cellEditor.select();
   }
 
+  private updateCellEditorPosition(): void {
+    if (!this.cellEditor) {
+      return;
+    }
+
+    if (this.editingRow === null || this.editingColumn === null) {
+      return;
+    }
+
+    const cellX =
+      GridConfig.rowHeaderWidth +
+      this.editingColumn * GridConfig.defaultColumnWidth -
+      this.scrollX;
+
+    const cellY =
+      GridConfig.columnHeaderHeight +
+      this.editingRow * GridConfig.defaultRowHeight -
+      this.scrollY;
+
+    const isVisible =
+      cellX + GridConfig.defaultColumnWidth >= GridConfig.rowHeaderWidth &&
+      cellX <= this.canvas.clientWidth &&
+      cellY + GridConfig.defaultRowHeight >= GridConfig.columnHeaderHeight &&
+      cellY <= this.canvas.clientHeight;
+
+    if (!isVisible) {
+      this.cellEditor.style.visibility = "hidden";
+      return;
+    }
+
+    this.cellEditor.style.display = "block";
+    this.cellEditor.style.visibility = "visible";
+    this.cellEditor.style.left = `${cellX}px`;
+    this.cellEditor.style.top = `${cellY}px`;
+    this.cellEditor.style.width = `${GridConfig.defaultColumnWidth}px`;
+    this.cellEditor.style.height = `${GridConfig.defaultRowHeight}px`;
+  }
+
   private hideCellEditor(): void {
     if (!this.cellEditor) {
       return;
     }
 
     this.cellEditor.style.display = "none";
+    this.cellEditor.style.visibility = "visible";
+
     this.editingRow = null;
     this.editingColumn = null;
   }
 
   private commitCellEditor(): void {
     if (!this.cellEditor) {
-      return;
-    }
-
-    if (this.cellEditor.style.display === "none") {
       return;
     }
 
