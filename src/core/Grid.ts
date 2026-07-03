@@ -17,7 +17,7 @@ export class Grid {
   private selectionService: SelectionService;
   private commandManager: CommandManager;
   private statusBar: HTMLElement | null;
-  private cellEditor: HTMLInputElement | null;
+  private cellEditor: HTMLTextAreaElement | null;
 
   private scrollX: number;
   private scrollY: number;
@@ -65,7 +65,7 @@ export class Grid {
     this.statusBar = document.getElementById("statusBar");
     this.cellEditor = document.getElementById(
       "cellEditor"
-    ) as HTMLInputElement | null;
+    ) as HTMLTextAreaElement | null;
 
     this.dataStore = new GridDataStore(
       GridConfig.defaultRowHeight,
@@ -631,16 +631,6 @@ export class Grid {
       return null;
     }
 
-    const isValidCell =
-      rowIndex >= 0 &&
-      rowIndex < GridConfig.totalRows &&
-      columnIndex >= 0 &&
-      columnIndex < GridConfig.totalColumns;
-
-    if (!isValidCell) {
-      return null;
-    }
-
     return {
       rowIndex,
       columnIndex
@@ -763,11 +753,9 @@ export class Grid {
       x += this.dataStore.getColumnWidth(index);
     }
 
-    const width = this.dataStore.getColumnWidth(columnIndex);
-
     return {
       x,
-      width
+      width: this.dataStore.getColumnWidth(columnIndex)
     };
   }
 
@@ -784,11 +772,9 @@ export class Grid {
       y += this.dataStore.getRowHeight(index);
     }
 
-    const height = this.dataStore.getRowHeight(rowIndex);
-
     return {
       y,
-      height
+      height: this.dataStore.getRowHeight(rowIndex)
     };
   }
 
@@ -861,6 +847,27 @@ export class Grid {
   }
 
   private handleEditorKeyDown(event: KeyboardEvent): void {
+    if (event.key === "Enter" && event.altKey) {
+      event.preventDefault();
+
+      if (!this.cellEditor) {
+        return;
+      }
+
+      const selectionStart = this.cellEditor.selectionStart;
+      const selectionEnd = this.cellEditor.selectionEnd;
+      const currentValue = this.cellEditor.value;
+
+      this.cellEditor.value =
+        currentValue.substring(0, selectionStart) +
+        "\n" +
+        currentValue.substring(selectionEnd);
+
+      const newCursorPosition = selectionStart + 1;
+      this.cellEditor.setSelectionRange(newCursorPosition, newCursorPosition);
+      return;
+    }
+
     if (event.key === "Enter") {
       event.preventDefault();
       this.saveCellEditorValue();

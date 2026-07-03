@@ -290,7 +290,13 @@ export class GridRenderer {
 
           this.context.fillStyle = GridConfig.cellTextColor;
 
-          this.context.fillText(String(value), column.x + 6, row.y + row.height / 2);
+          this.drawCellText(
+            String(value),
+            column.x,
+            row.y,
+            column.width,
+            row.height
+          );
 
           this.context.restore();
         }
@@ -356,6 +362,30 @@ export class GridRenderer {
 
     if (selection.type === "range") {
       this.drawRangeSelection(scrollX, scrollY, selection);
+    }
+  }
+
+  private drawCellText(
+    text: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): void {
+    const lines = text.split("\n");
+    const lineHeight = 16;
+    const paddingX = 6;
+    const paddingY = 4;
+
+    let textY = y + paddingY + lineHeight / 2;
+
+    for (const line of lines) {
+      if (textY > y + height - paddingY) {
+        break;
+      }
+
+      this.context.fillText(line, x + paddingX, textY);
+      textY += lineHeight;
     }
   }
 
