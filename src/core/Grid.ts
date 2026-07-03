@@ -268,12 +268,12 @@ export class Grid {
 
     const columnIndex = Math.floor(
       (mouseX - GridConfig.rowHeaderWidth + this.scrollX) /
-        GridConfig.defaultColumnWidth
+      GridConfig.defaultColumnWidth
     );
 
     const rowIndex = Math.floor(
       (mouseY - GridConfig.columnHeaderHeight + this.scrollY) /
-        GridConfig.defaultRowHeight
+      GridConfig.defaultRowHeight
     );
 
     const isValidCell =
@@ -365,12 +365,21 @@ export class Grid {
       return;
     }
 
+    const wasHidden = this.cellEditor.style.visibility === "hidden";
+
     this.cellEditor.style.display = "block";
     this.cellEditor.style.visibility = "visible";
     this.cellEditor.style.left = `${cellX}px`;
     this.cellEditor.style.top = `${cellY}px`;
     this.cellEditor.style.width = `${GridConfig.defaultColumnWidth}px`;
     this.cellEditor.style.height = `${GridConfig.defaultRowHeight}px`;
+
+    if (wasHidden) {
+      this.cellEditor.focus();
+
+      const valueLength = this.cellEditor.value.length;
+      this.cellEditor.setSelectionRange(valueLength, valueLength);
+    }
   }
 
   private hideCellEditor(): void {
@@ -440,7 +449,7 @@ export class Grid {
   private handleRowHeaderClick(mouseY: number): void {
     const rowIndex = Math.floor(
       (mouseY - GridConfig.columnHeaderHeight + this.scrollY) /
-        GridConfig.defaultRowHeight
+      GridConfig.defaultRowHeight
     );
 
     const isValidRow = rowIndex >= 0 && rowIndex < GridConfig.totalRows;
@@ -458,7 +467,7 @@ export class Grid {
   private handleColumnHeaderClick(mouseX: number): void {
     const columnIndex = Math.floor(
       (mouseX - GridConfig.rowHeaderWidth + this.scrollX) /
-        GridConfig.defaultColumnWidth
+      GridConfig.defaultColumnWidth
     );
 
     const isValidColumn =
@@ -525,9 +534,8 @@ export class Grid {
       normalizedStartColumn
     )}${normalizedStartRow + 1}`;
 
-    const endCellName = `${CanvasUtils.getColumnName(normalizedEndColumn)}${
-      normalizedEndRow + 1
-    }`;
+    const endCellName = `${CanvasUtils.getColumnName(normalizedEndColumn)}${normalizedEndRow + 1
+      }`;
 
     this.statusBar.textContent = `Selected Range: ${startCellName}:${endCellName} | Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -`;
   }
