@@ -4,12 +4,16 @@ import { GridRenderer } from "./GridRenderer";
 import { DataGenerator } from "../services/DataGenerator";
 import { SelectionService } from "../services/SelectionService";
 import { CanvasUtils } from "../utils/CanvasUtils";
+import { CommandManager } from "../commands/CommandManager";
+import { EditCellCommand } from "../commands/EditCellCommand";
+import type { CellValue } from "./GridDataStore";
 
 export class Grid {
   private canvas: HTMLCanvasElement;
   private dataStore: GridDataStore;
   private renderer: GridRenderer;
   private selectionService: SelectionService;
+  private commandManager: CommandManager;
   private statusBar: HTMLElement | null;
   private cellEditor: HTMLInputElement | null;
 
@@ -47,6 +51,7 @@ export class Grid {
     );
 
     this.selectionService = new SelectionService();
+    this.commandManager = new CommandManager();
     this.renderer = new GridRenderer(this.canvas, this.dataStore);
 
     this.initializeCanvas();
@@ -125,10 +130,55 @@ export class Grid {
       this.handleMouseUp();
     });
 
+    window.addEventListener("keydown", (event: KeyboardEvent) => {
+      this.handleGlobalKeyDown(event);
+    });
+
+    const undoButton = document.getElementById("undoBtn");
+    const redoButton = document.getElementById("redoBtn");
+
+    if (undoButton) {
+      undoButton.addEventListener("click", () => {
+        this.commitCellEditor();
+        this.commandManager.undo();
+        this.render();
+      });
+    }
+
+    if (redoButton) {
+      redoButton.addEventListener("click", () => {
+        this.commitCellEditor();
+        this.commandManager.redo();
+        this.render();
+      });
+    }
+
     if (this.cellEditor) {
       this.cellEditor.addEventListener("keydown", (event: KeyboardEvent) => {
         this.handleEditorKeyDown(event);
       });
+    }
+  }
+
+  private handleGlobalKeyDown(event: KeyboardEvent): void {
+    const isUndo = event.ctrlKey && event.key.toLowerCase() === "z";
+    const isRedo = event.ctrlKey && event.key.toLowerCase() === "y";
+
+    if (isUndo) {
+      event.preventDefault();
+
+      this.commitCellEditor();
+      this.commandManager.undo();
+      this.render();
+      return;
+    }
+
+    if (isRedo) {
+      event.preventDefault();
+
+      this.commitCellEditor();
+      this.commandManager.redo();
+      this.render();
     }
   }
 
@@ -268,12 +318,12 @@ export class Grid {
 
     const columnIndex = Math.floor(
       (mouseX - GridConfig.rowHeaderWidth + this.scrollX) /
-      GridConfig.defaultColumnWidth
+        GridConfig.defaultColumnWidth
     );
 
     const rowIndex = Math.floor(
       (mouseY - GridConfig.columnHeaderHeight + this.scrollY) /
-      GridConfig.defaultRowHeight
+        GridConfig.defaultRowHeight
     );
 
     const isValidCell =
@@ -432,15 +482,31 @@ export class Grid {
 
     const rowIndex = this.editingRow;
     const columnIndex = this.editingColumn;
-    const newValue = this.cellEditor.value.trim();
+    const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
 
-    if (newValue === "") {
-      this.dataStore.clearCellValue(rowIndex, columnIndex);
+    const editorValue = this.cellEditor.value.trim();
+
+    let newValue: CellValue;
+
+    if (editorValue === "") {
+      newValue = null;
     } else {
-      const numericValue = Number(newValue);
-      const valueToSave = Number.isNaN(numericValue) ? newValue : numericValue;
+      const numericValue = Number(editorValue);
+      newValue = Number.isNaN(numericValue) ? editorValue : numericValue;
+    }
 
-      this.dataStore.setCellValue(rowIndex, columnIndex, valueToSave);
+    const isSameValue = String(oldValue ?? "") === String(newValue ?? "");
+
+    if (!isSameValue) {
+      const command = new EditCellCommand(
+        this.dataStore,
+        rowIndex,
+        columnIndex,
+        oldValue,
+        newValue
+      );
+
+      this.commandManager.execute(command);
     }
 
     this.hideCellEditor();
@@ -464,7 +530,7 @@ export class Grid {
   private handleRowHeaderClick(mouseY: number): void {
     const rowIndex = Math.floor(
       (mouseY - GridConfig.columnHeaderHeight + this.scrollY) /
-      GridConfig.defaultRowHeight
+        GridConfig.defaultRowHeight
     );
 
     const isValidRow = rowIndex >= 0 && rowIndex < GridConfig.totalRows;
@@ -482,7 +548,7 @@ export class Grid {
   private handleColumnHeaderClick(mouseX: number): void {
     const columnIndex = Math.floor(
       (mouseX - GridConfig.rowHeaderWidth + this.scrollX) /
-      GridConfig.defaultColumnWidth
+        GridConfig.defaultColumnWidth
     );
 
     const isValidColumn =
@@ -549,8 +615,9 @@ export class Grid {
       normalizedStartColumn
     )}${normalizedStartRow + 1}`;
 
-    const endCellName = `${CanvasUtils.getColumnName(normalizedEndColumn)}${normalizedEndRow + 1
-      }`;
+    const endCellName = `${CanvasUtils.getColumnName(normalizedEndColumn)}${
+      normalizedEndRow + 1
+    }`;
 
     this.statusBar.textContent = `Selected Range: ${startCellName}:${endCellName} | Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -`;
   }
