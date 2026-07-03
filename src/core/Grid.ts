@@ -326,6 +326,8 @@ export class Grid {
 
     this.cellEditor.style.display = "block";
     this.cellEditor.style.visibility = "visible";
+    this.cellEditor.style.opacity = "1";
+    this.cellEditor.style.pointerEvents = "auto";
     this.cellEditor.style.left = `${cellX}px`;
     this.cellEditor.style.top = `${cellY}px`;
     this.cellEditor.style.width = `${GridConfig.defaultColumnWidth}px`;
@@ -361,20 +363,31 @@ export class Grid {
       cellY <= this.canvas.clientHeight;
 
     if (!isVisible) {
-      this.cellEditor.style.visibility = "hidden";
+      this.cellEditor.style.display = "block";
+      this.cellEditor.style.visibility = "visible";
+      this.cellEditor.style.opacity = "0";
+      this.cellEditor.style.pointerEvents = "none";
+
+      if (document.activeElement !== this.cellEditor) {
+        this.cellEditor.focus();
+
+        const valueLength = this.cellEditor.value.length;
+        this.cellEditor.setSelectionRange(valueLength, valueLength);
+      }
+
       return;
     }
 
-    const wasHidden = this.cellEditor.style.visibility === "hidden";
-
     this.cellEditor.style.display = "block";
     this.cellEditor.style.visibility = "visible";
+    this.cellEditor.style.opacity = "1";
+    this.cellEditor.style.pointerEvents = "auto";
     this.cellEditor.style.left = `${cellX}px`;
     this.cellEditor.style.top = `${cellY}px`;
     this.cellEditor.style.width = `${GridConfig.defaultColumnWidth}px`;
     this.cellEditor.style.height = `${GridConfig.defaultRowHeight}px`;
 
-    if (wasHidden) {
+    if (document.activeElement !== this.cellEditor) {
       this.cellEditor.focus();
 
       const valueLength = this.cellEditor.value.length;
@@ -389,6 +402,8 @@ export class Grid {
 
     this.cellEditor.style.display = "none";
     this.cellEditor.style.visibility = "visible";
+    this.cellEditor.style.opacity = "1";
+    this.cellEditor.style.pointerEvents = "auto";
 
     this.editingRow = null;
     this.editingColumn = null;
