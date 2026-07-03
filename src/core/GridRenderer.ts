@@ -238,6 +238,17 @@ export class GridRenderer {
         const value = this.dataStore.getCellValue(rowIndex, columnIndex);
 
         if (value !== null) {
+          this.context.save();
+
+          this.context.beginPath();
+          this.context.rect(
+            x + 1,
+            y + 1,
+            GridConfig.defaultColumnWidth - 2,
+            GridConfig.defaultRowHeight - 2
+          );
+          this.context.clip();
+
           this.context.fillStyle = GridConfig.cellTextColor;
 
           this.context.fillText(
@@ -245,6 +256,8 @@ export class GridRenderer {
             x + 6,
             y + GridConfig.defaultRowHeight / 2
           );
+
+          this.context.restore();
         }
       }
     }

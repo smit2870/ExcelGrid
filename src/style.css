@@ -85,4 +85,7 @@ body {
   background-color: #ffffff;
   color: #222222;
   z-index: 10;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
 }
