@@ -1,7 +1,13 @@
 import { GridConfig } from "./GridConfig";
-import { GridDataStore } from "./GridDataStore";
+import type { GridDataStore } from "./GridDataStore";
 import { CanvasUtils } from "../utils/CanvasUtils";
 import type { Selection } from "../models/Selection";
+
+interface VisibleColumn {
+  columnIndex: number;
+  x: number;
+  width: number;
+}
 
 export class GridRenderer {
   private canvas: HTMLCanvasElement;
@@ -53,6 +59,62 @@ export class GridRenderer {
     );
   }
 
+  private getVisibleColumns(scrollX: number): VisibleColumn[] {
+    const visibleColumns: VisibleColumn[] = [];
+
+    let currentX = GridConfig.rowHeaderWidth - scrollX;
+
+    for (
+      let columnIndex = 0;
+      columnIndex < GridConfig.totalColumns;
+      columnIndex++
+    ) {
+      const width = this.dataStore.getColumnWidth(columnIndex);
+
+      const isVisible =
+        currentX + width >= GridConfig.rowHeaderWidth &&
+        currentX <= this.canvas.clientWidth;
+
+      if (isVisible) {
+        visibleColumns.push({
+          columnIndex,
+          x: currentX,
+          width
+        });
+      }
+
+      currentX += width;
+
+      if (currentX > this.canvas.clientWidth) {
+        break;
+      }
+    }
+
+    return visibleColumns;
+  }
+
+  private getColumnBounds(
+    columnIndex: number,
+    scrollX: number
+  ): { x: number; width: number } | null {
+    if (columnIndex < 0 || columnIndex >= GridConfig.totalColumns) {
+      return null;
+    }
+
+    let x = GridConfig.rowHeaderWidth - scrollX;
+
+    for (let index = 0; index < columnIndex; index++) {
+      x += this.dataStore.getColumnWidth(index);
+    }
+
+    const width = this.dataStore.getColumnWidth(columnIndex);
+
+    return {
+      x,
+      width
+    };
+  }
+
   private drawTopLeftCorner(): void {
     this.context.fillStyle = GridConfig.headerBackgroundColor;
 
@@ -74,60 +136,37 @@ export class GridRenderer {
   }
 
   private drawColumnHeaders(scrollX: number): void {
-    const startColumn = Math.floor(scrollX / GridConfig.defaultColumnWidth);
-
-    const visibleColumnCount =
-      Math.ceil(
-        (this.canvas.clientWidth - GridConfig.rowHeaderWidth) /
-        GridConfig.defaultColumnWidth
-      ) + 1;
+    const visibleColumns = this.getVisibleColumns(scrollX);
 
     this.context.font = GridConfig.headerFont;
     this.context.textAlign = "center";
     this.context.textBaseline = "middle";
 
-    for (
-      let columnOffset = 0;
-      columnOffset < visibleColumnCount;
-      columnOffset++
-    ) {
-      const columnIndex = startColumn + columnOffset;
-
-      if (columnIndex >= GridConfig.totalColumns) {
-        break;
-      }
-
-      const x =
-        GridConfig.rowHeaderWidth +
-        columnOffset * GridConfig.defaultColumnWidth -
-        (scrollX % GridConfig.defaultColumnWidth);
-
-      const y = 0;
-
+    for (const column of visibleColumns) {
       this.context.fillStyle = GridConfig.headerBackgroundColor;
 
       this.context.fillRect(
-        x,
-        y,
-        GridConfig.defaultColumnWidth,
+        column.x,
+        0,
+        column.width,
         GridConfig.columnHeaderHeight
       );
 
       this.context.strokeStyle = GridConfig.gridLineColor;
 
       this.context.strokeRect(
-        x,
-        y,
-        GridConfig.defaultColumnWidth,
+        column.x,
+        0,
+        column.width,
         GridConfig.columnHeaderHeight
       );
 
       this.context.fillStyle = GridConfig.headerTextColor;
 
       this.context.fillText(
-        CanvasUtils.getColumnName(columnIndex),
-        x + GridConfig.defaultColumnWidth / 2,
-        y + GridConfig.columnHeaderHeight / 2
+        CanvasUtils.getColumnName(column.columnIndex),
+        column.x + column.width / 2,
+        GridConfig.columnHeaderHeight / 2
       );
     }
   }
@@ -138,7 +177,7 @@ export class GridRenderer {
     const visibleRowCount =
       Math.ceil(
         (this.canvas.clientHeight - GridConfig.columnHeaderHeight) /
-        GridConfig.defaultRowHeight
+          GridConfig.defaultRowHeight
       ) + 1;
 
     this.context.font = GridConfig.headerFont;
@@ -152,8 +191,6 @@ export class GridRenderer {
         break;
       }
 
-      const x = 0;
-
       const y =
         GridConfig.columnHeaderHeight +
         rowOffset * GridConfig.defaultRowHeight -
@@ -162,7 +199,7 @@ export class GridRenderer {
       this.context.fillStyle = GridConfig.headerBackgroundColor;
 
       this.context.fillRect(
-        x,
+        0,
         y,
         GridConfig.rowHeaderWidth,
         GridConfig.defaultRowHeight
@@ -171,7 +208,7 @@ export class GridRenderer {
       this.context.strokeStyle = GridConfig.gridLineColor;
 
       this.context.strokeRect(
-        x,
+        0,
         y,
         GridConfig.rowHeaderWidth,
         GridConfig.defaultRowHeight
@@ -181,7 +218,7 @@ export class GridRenderer {
 
       this.context.fillText(
         String(rowIndex + 1),
-        x + GridConfig.rowHeaderWidth / 2,
+        GridConfig.rowHeaderWidth / 2,
         y + GridConfig.defaultRowHeight / 2
       );
     }
@@ -189,18 +226,12 @@ export class GridRenderer {
 
   private drawCells(scrollX: number, scrollY: number): void {
     const startRow = Math.floor(scrollY / GridConfig.defaultRowHeight);
-    const startColumn = Math.floor(scrollX / GridConfig.defaultColumnWidth);
+    const visibleColumns = this.getVisibleColumns(scrollX);
 
     const visibleRowCount =
       Math.ceil(
         (this.canvas.clientHeight - GridConfig.columnHeaderHeight) /
-        GridConfig.defaultRowHeight
-      ) + 1;
-
-    const visibleColumnCount =
-      Math.ceil(
-        (this.canvas.clientWidth - GridConfig.rowHeaderWidth) /
-        GridConfig.defaultColumnWidth
+          GridConfig.defaultRowHeight
       ) + 1;
 
     this.context.font = GridConfig.font;
@@ -219,32 +250,20 @@ export class GridRenderer {
         rowOffset * GridConfig.defaultRowHeight -
         (scrollY % GridConfig.defaultRowHeight);
 
-      for (
-        let columnOffset = 0;
-        columnOffset < visibleColumnCount;
-        columnOffset++
-      ) {
-        const columnIndex = startColumn + columnOffset;
-
-        if (columnIndex >= GridConfig.totalColumns) {
-          break;
-        }
-
-        const x =
-          GridConfig.rowHeaderWidth +
-          columnOffset * GridConfig.defaultColumnWidth -
-          (scrollX % GridConfig.defaultColumnWidth);
-
-        const value = this.dataStore.getCellValue(rowIndex, columnIndex);
+      for (const column of visibleColumns) {
+        const value = this.dataStore.getCellValue(
+          rowIndex,
+          column.columnIndex
+        );
 
         if (value !== null) {
           this.context.save();
 
           this.context.beginPath();
           this.context.rect(
-            x + 1,
+            column.x + 1,
             y + 1,
-            GridConfig.defaultColumnWidth - 2,
+            column.width - 2,
             GridConfig.defaultRowHeight - 2
           );
           this.context.clip();
@@ -253,7 +272,7 @@ export class GridRenderer {
 
           this.context.fillText(
             String(value),
-            x + 6,
+            column.x + 6,
             y + GridConfig.defaultRowHeight / 2
           );
 
@@ -265,18 +284,12 @@ export class GridRenderer {
 
   private drawGridLines(scrollX: number, scrollY: number): void {
     const startRow = Math.floor(scrollY / GridConfig.defaultRowHeight);
-    const startColumn = Math.floor(scrollX / GridConfig.defaultColumnWidth);
+    const visibleColumns = this.getVisibleColumns(scrollX);
 
     const visibleRowCount =
       Math.ceil(
         (this.canvas.clientHeight - GridConfig.columnHeaderHeight) /
-        GridConfig.defaultRowHeight
-      ) + 1;
-
-    const visibleColumnCount =
-      Math.ceil(
-        (this.canvas.clientWidth - GridConfig.rowHeaderWidth) /
-        GridConfig.defaultColumnWidth
+          GridConfig.defaultRowHeight
       ) + 1;
 
     this.context.strokeStyle = GridConfig.gridLineColor;
@@ -300,25 +313,15 @@ export class GridRenderer {
       this.context.stroke();
     }
 
-    for (
-      let columnOffset = 0;
-      columnOffset <= visibleColumnCount;
-      columnOffset++
-    ) {
-      const columnIndex = startColumn + columnOffset;
-
-      if (columnIndex > GridConfig.totalColumns) {
-        break;
-      }
-
-      const x =
-        GridConfig.rowHeaderWidth +
-        columnOffset * GridConfig.defaultColumnWidth -
-        (scrollX % GridConfig.defaultColumnWidth);
+    for (const column of visibleColumns) {
+      this.context.beginPath();
+      this.context.moveTo(column.x, GridConfig.columnHeaderHeight);
+      this.context.lineTo(column.x, this.canvas.clientHeight);
+      this.context.stroke();
 
       this.context.beginPath();
-      this.context.moveTo(x, GridConfig.columnHeaderHeight);
-      this.context.lineTo(x, this.canvas.clientHeight);
+      this.context.moveTo(column.x + column.width, GridConfig.columnHeaderHeight);
+      this.context.lineTo(column.x + column.width, this.canvas.clientHeight);
       this.context.stroke();
     }
   }
@@ -360,10 +363,13 @@ export class GridRenderer {
     const selectedRow = selection.startRow;
     const selectedColumn = selection.startColumn;
 
-    const cellX =
-      GridConfig.rowHeaderWidth +
-      selectedColumn * GridConfig.defaultColumnWidth -
-      scrollX;
+    const columnBounds = this.getColumnBounds(selectedColumn, scrollX);
+
+    if (!columnBounds) {
+      return;
+    }
+
+    const cellX = columnBounds.x;
 
     const cellY =
       GridConfig.columnHeaderHeight +
@@ -371,7 +377,7 @@ export class GridRenderer {
       scrollY;
 
     const isVisible =
-      cellX + GridConfig.defaultColumnWidth >= GridConfig.rowHeaderWidth &&
+      cellX + columnBounds.width >= GridConfig.rowHeaderWidth &&
       cellX <= this.canvas.clientWidth &&
       cellY + GridConfig.defaultRowHeight >= GridConfig.columnHeaderHeight &&
       cellY <= this.canvas.clientHeight;
@@ -385,7 +391,7 @@ export class GridRenderer {
     this.context.fillRect(
       cellX,
       cellY,
-      GridConfig.defaultColumnWidth,
+      columnBounds.width,
       GridConfig.defaultRowHeight
     );
 
@@ -395,7 +401,7 @@ export class GridRenderer {
     this.context.strokeRect(
       cellX + 1,
       cellY + 1,
-      GridConfig.defaultColumnWidth - 2,
+      columnBounds.width - 2,
       GridConfig.defaultRowHeight - 2
     );
 
@@ -442,14 +448,16 @@ export class GridRenderer {
 
   private drawColumnSelection(scrollX: number, selection: Selection): void {
     const selectedColumn = selection.startColumn;
+    const columnBounds = this.getColumnBounds(selectedColumn, scrollX);
 
-    const columnX =
-      GridConfig.rowHeaderWidth +
-      selectedColumn * GridConfig.defaultColumnWidth -
-      scrollX;
+    if (!columnBounds) {
+      return;
+    }
+
+    const columnX = columnBounds.x;
 
     const isVisible =
-      columnX + GridConfig.defaultColumnWidth >= GridConfig.rowHeaderWidth &&
+      columnX + columnBounds.width >= GridConfig.rowHeaderWidth &&
       columnX <= this.canvas.clientWidth;
 
     if (!isVisible) {
@@ -461,7 +469,7 @@ export class GridRenderer {
     this.context.fillRect(
       columnX,
       GridConfig.columnHeaderHeight,
-      GridConfig.defaultColumnWidth,
+      columnBounds.width,
       this.canvas.clientHeight - GridConfig.columnHeaderHeight
     );
 
@@ -471,7 +479,7 @@ export class GridRenderer {
     this.context.strokeRect(
       columnX + 1,
       GridConfig.columnHeaderHeight + 1,
-      GridConfig.defaultColumnWidth - 2,
+      columnBounds.width - 2,
       this.canvas.clientHeight - GridConfig.columnHeaderHeight - 2
     );
 
@@ -488,18 +496,21 @@ export class GridRenderer {
     const startColumn = Math.min(selection.startColumn, selection.endColumn);
     const endColumn = Math.max(selection.startColumn, selection.endColumn);
 
-    const rangeX =
-      GridConfig.rowHeaderWidth +
-      startColumn * GridConfig.defaultColumnWidth -
-      scrollX;
+    const startColumnBounds = this.getColumnBounds(startColumn, scrollX);
+    const endColumnBounds = this.getColumnBounds(endColumn, scrollX);
 
+    if (!startColumnBounds || !endColumnBounds) {
+      return;
+    }
+
+    const rangeX = startColumnBounds.x;
     const rangeY =
       GridConfig.columnHeaderHeight +
       startRow * GridConfig.defaultRowHeight -
       scrollY;
 
-    const rangeWidth =
-      (endColumn - startColumn + 1) * GridConfig.defaultColumnWidth;
+    const rangeRight = endColumnBounds.x + endColumnBounds.width;
+    const rangeWidth = rangeRight - rangeX;
 
     const rangeHeight =
       (endRow - startRow + 1) * GridConfig.defaultRowHeight;
@@ -518,19 +529,17 @@ export class GridRenderer {
     const visibleY = Math.max(rangeY, GridConfig.columnHeaderHeight);
 
     const visibleRight = Math.min(rangeX + rangeWidth, this.canvas.clientWidth);
-    const visibleBottom = Math.min(rangeY + rangeHeight, this.canvas.clientHeight);
+    const visibleBottom = Math.min(
+      rangeY + rangeHeight,
+      this.canvas.clientHeight
+    );
 
     const visibleWidth = visibleRight - visibleX;
     const visibleHeight = visibleBottom - visibleY;
 
     this.context.fillStyle = GridConfig.selectedCellFillColor;
 
-    this.context.fillRect(
-      visibleX,
-      visibleY,
-      visibleWidth,
-      visibleHeight
-    );
+    this.context.fillRect(visibleX, visibleY, visibleWidth, visibleHeight);
 
     this.context.strokeStyle = GridConfig.selectedCellBorderColor;
     this.context.lineWidth = 2;
