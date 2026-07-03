@@ -59,8 +59,8 @@ export class Grid {
     this.resizeCanvas();
 
     window.addEventListener("resize", () => {
+      this.commitCellEditor();
       this.resizeCanvas();
-      this.hideCellEditor();
       this.render();
     });
   }
@@ -97,7 +97,7 @@ export class Grid {
     this.canvas.addEventListener("wheel", (event: WheelEvent) => {
       event.preventDefault();
 
-      this.hideCellEditor();
+      this.commitCellEditor();
 
       this.scrollX += event.deltaX;
       this.scrollY += event.deltaY;
@@ -144,9 +144,9 @@ export class Grid {
       mouseY < GridConfig.columnHeaderHeight;
 
     if (isTopLeftCorner) {
+      this.commitCellEditor();
       this.selectionService.clearSelection();
       this.resetStatusBar();
-      this.hideCellEditor();
       this.render();
       return;
     }
@@ -156,7 +156,7 @@ export class Grid {
       mouseY < GridConfig.columnHeaderHeight;
 
     if (isColumnHeaderClick) {
-      this.hideCellEditor();
+      this.commitCellEditor();
       this.handleColumnHeaderClick(mouseX);
       return;
     }
@@ -166,12 +166,12 @@ export class Grid {
       mouseY >= GridConfig.columnHeaderHeight;
 
     if (isRowHeaderClick) {
-      this.hideCellEditor();
+      this.commitCellEditor();
       this.handleRowHeaderClick(mouseY);
       return;
     }
 
-    this.hideCellEditor();
+    this.commitCellEditor();
     this.startRangeSelection(mouseX, mouseY);
   }
 
@@ -214,6 +214,7 @@ export class Grid {
 
   private handleDoubleClick(event: MouseEvent): void {
     const mousePosition = CanvasUtils.getMousePosition(this.canvas, event);
+
     const cellPosition = this.getCellPositionFromMouse(
       mousePosition.x,
       mousePosition.y
@@ -344,6 +345,22 @@ export class Grid {
     this.editingColumn = null;
   }
 
+  private commitCellEditor(): void {
+    if (!this.cellEditor) {
+      return;
+    }
+
+    if (this.cellEditor.style.display === "none") {
+      return;
+    }
+
+    if (this.editingRow === null || this.editingColumn === null) {
+      return;
+    }
+
+    this.saveCellEditorValue();
+  }
+
   private saveCellEditorValue(): void {
     if (!this.cellEditor) {
       return;
@@ -353,19 +370,17 @@ export class Grid {
       return;
     }
 
+    const rowIndex = this.editingRow;
+    const columnIndex = this.editingColumn;
     const newValue = this.cellEditor.value.trim();
 
     if (newValue === "") {
-      this.dataStore.clearCellValue(this.editingRow, this.editingColumn);
+      this.dataStore.clearCellValue(rowIndex, columnIndex);
     } else {
       const numericValue = Number(newValue);
       const valueToSave = Number.isNaN(numericValue) ? newValue : numericValue;
 
-      this.dataStore.setCellValue(
-        this.editingRow,
-        this.editingColumn,
-        valueToSave
-      );
+      this.dataStore.setCellValue(rowIndex, columnIndex, valueToSave);
     }
 
     this.hideCellEditor();
