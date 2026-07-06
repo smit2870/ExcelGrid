@@ -1,15 +1,21 @@
 import { GridConfig } from "./GridConfig";
 import { GridDataStore } from "./GridDataStore";
 import { GridRenderer } from "./GridRenderer";
+
 import { DataGenerator } from "../services/DataGenerator";
 import { SelectionService } from "../services/SelectionService";
-import { CanvasUtils } from "../utils/CanvasUtils";
-import { CommandManager } from "../commands/CommandManager";
-import { EditCellCommand } from "../commands/EditCellCommand";
 import { CoordinateService } from "../services/CoordinateService";
 import { StatusBarService } from "../services/StatusBarService";
 import { CellEditorService } from "../services/CellEditorService";
 import { ResizeService } from "../services/ResizeService";
+
+import { CanvasUtils } from "../utils/CanvasUtils";
+
+import { CommandManager } from "../commands/CommandManager";
+import { EditCellCommand } from "../commands/EditCellCommand";
+
+import { MouseHandler } from "../events/MouseHandler";
+
 import type { CellValue } from "./GridDataStore";
 
 export class Grid {
@@ -23,6 +29,7 @@ export class Grid {
   private statusBarService: StatusBarService;
   private cellEditorService: CellEditorService;
   private resizeService: ResizeService;
+  private mouseHandler: MouseHandler;
 
   private statusBar: HTMLElement | null;
   private cellEditor: HTMLTextAreaElement | null;
@@ -56,7 +63,11 @@ export class Grid {
 
     this.selectionService = new SelectionService();
     this.commandManager = new CommandManager();
-    this.coordinateService = new CoordinateService(this.canvas, this.dataStore);
+
+    this.coordinateService = new CoordinateService(
+      this.canvas,
+      this.dataStore
+    );
 
     this.statusBarService = new StatusBarService(
       this.statusBar,
@@ -74,6 +85,24 @@ export class Grid {
       this.dataStore,
       this.commandManager
     );
+
+    this.mouseHandler = new MouseHandler(this.canvas, {
+      onWheel: (event: WheelEvent) => {
+        this.handleWheel(event);
+      },
+      onMouseDown: (event: MouseEvent) => {
+        this.handleMouseDown(event);
+      },
+      onMouseMove: (event: MouseEvent) => {
+        this.handleMouseMove(event);
+      },
+      onDoubleClick: (event: MouseEvent) => {
+        this.handleDoubleClick(event);
+      },
+      onMouseUp: () => {
+        this.handleMouseUp();
+      }
+    });
 
     this.renderer = new GridRenderer(this.canvas, this.dataStore);
 
@@ -123,36 +152,7 @@ export class Grid {
   }
 
   private attachEvents(): void {
-    const gridContainer = this.canvas.parentElement;
-
-    if (gridContainer) {
-      gridContainer.addEventListener("wheel", (event: WheelEvent) => {
-        event.preventDefault();
-
-        this.scrollX += event.deltaX;
-        this.scrollY += event.deltaY;
-
-        this.limitScrollPosition();
-        this.render();
-        this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-      });
-    }
-
-    this.canvas.addEventListener("mousedown", (event: MouseEvent) => {
-      this.handleMouseDown(event);
-    });
-
-    this.canvas.addEventListener("mousemove", (event: MouseEvent) => {
-      this.handleMouseMove(event);
-    });
-
-    this.canvas.addEventListener("dblclick", (event: MouseEvent) => {
-      this.handleDoubleClick(event);
-    });
-
-    window.addEventListener("mouseup", () => {
-      this.handleMouseUp();
-    });
+    this.mouseHandler.attach();
 
     window.addEventListener("keydown", (event: KeyboardEvent) => {
       this.handleGlobalKeyDown(event);
@@ -194,6 +194,17 @@ export class Grid {
         this.handleEditorKeyDown(event);
       });
     }
+  }
+
+  private handleWheel(event: WheelEvent): void {
+    event.preventDefault();
+
+    this.scrollX += event.deltaX;
+    this.scrollY += event.deltaY;
+
+    this.limitScrollPosition();
+    this.render();
+    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
   }
 
   private handleGlobalKeyDown(event: KeyboardEvent): void {
