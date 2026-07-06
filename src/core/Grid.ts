@@ -8,6 +8,7 @@ import { CoordinateService } from "../services/CoordinateService";
 import { StatusBarService } from "../services/StatusBarService";
 import { CellEditorService } from "../services/CellEditorService";
 import { ResizeService } from "../services/ResizeService";
+import { KeyboardNavigationService } from "../services/KeyboardNavigationService";
 
 import { CanvasUtils } from "../utils/CanvasUtils";
 
@@ -30,6 +31,7 @@ export class Grid {
   private statusBarService: StatusBarService;
   private cellEditorService: CellEditorService;
   private resizeService: ResizeService;
+  private keyboardNavigationService: KeyboardNavigationService;
 
   private mouseHandler: MouseHandler;
   private keyboardHandler: KeyboardHandler;
@@ -87,6 +89,12 @@ export class Grid {
     this.resizeService = new ResizeService(
       this.dataStore,
       this.commandManager
+    );
+
+    this.keyboardNavigationService = new KeyboardNavigationService(
+      this.canvas,
+      this.selectionService,
+      this.coordinateService
     );
 
     this.mouseHandler = new MouseHandler(this.canvas, {
@@ -241,9 +249,57 @@ export class Grid {
       this.limitScrollPosition();
       this.render();
       this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+
       this.statusBarService.updateForSelection(
         this.selectionService.getSelection()
       );
+
+      return;
+    }
+
+    if (this.cellEditorService.isEditing()) {
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      this.moveSelectedCell(0, 1);
+      return;
+    }
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      this.moveSelectedCell(0, -1);
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      this.moveSelectedCell(1, 0);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      this.moveSelectedCell(-1, 0);
+      return;
+    }
+
+    if (event.key === "Tab" && event.shiftKey) {
+      event.preventDefault();
+      this.moveSelectedCell(0, -1);
+      return;
+    }
+
+    if (event.key === "Tab") {
+      event.preventDefault();
+      this.moveSelectedCell(0, 1);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      this.startEditingSelectedCell();
     }
   }
 
@@ -498,6 +554,57 @@ export class Grid {
       rowIndex,
       columnIndex
     };
+  }
+
+  private moveSelectedCell(rowDelta: number, columnDelta: number): void {
+    const navigationResult = this.keyboardNavigationService.moveSelectedCell(
+      rowDelta,
+      columnDelta,
+      this.scrollX,
+      this.scrollY
+    );
+
+    this.scrollX = navigationResult.scrollX;
+    this.scrollY = navigationResult.scrollY;
+
+    this.limitScrollPosition();
+
+    this.statusBarService.updateCell(
+      navigationResult.rowIndex,
+      navigationResult.columnIndex,
+      this.selectionService.getSelection()
+    );
+
+    this.render();
+    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+  }
+
+  private startEditingSelectedCell(): void {
+    const navigationResult =
+      this.keyboardNavigationService.prepareSelectedCellForEditing(
+        this.scrollX,
+        this.scrollY
+      );
+
+    this.scrollX = navigationResult.scrollX;
+    this.scrollY = navigationResult.scrollY;
+
+    this.limitScrollPosition();
+
+    this.statusBarService.updateCell(
+      navigationResult.rowIndex,
+      navigationResult.columnIndex,
+      this.selectionService.getSelection()
+    );
+
+    this.render();
+
+    this.cellEditorService.show(
+      navigationResult.rowIndex,
+      navigationResult.columnIndex,
+      this.scrollX,
+      this.scrollY
+    );
   }
 
   private commitCellEditor(): void {
