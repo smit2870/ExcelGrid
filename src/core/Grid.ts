@@ -6,22 +6,23 @@ import { SelectionService } from "../services/SelectionService";
 import { CanvasUtils } from "../utils/CanvasUtils";
 import { CommandManager } from "../commands/CommandManager";
 import { EditCellCommand } from "../commands/EditCellCommand";
-import { ResizeColumnCommand } from "../commands/ResizeColumnCommand";
-import { ResizeRowCommand } from "../commands/ResizeRowCommand";
 import { CoordinateService } from "../services/CoordinateService";
 import { StatusBarService } from "../services/StatusBarService";
 import { CellEditorService } from "../services/CellEditorService";
+import { ResizeService } from "../services/ResizeService";
 import type { CellValue } from "./GridDataStore";
 
 export class Grid {
   private canvas: HTMLCanvasElement;
   private dataStore: GridDataStore;
   private renderer: GridRenderer;
+
   private selectionService: SelectionService;
   private commandManager: CommandManager;
   private coordinateService: CoordinateService;
   private statusBarService: StatusBarService;
   private cellEditorService: CellEditorService;
+  private resizeService: ResizeService;
 
   private statusBar: HTMLElement | null;
   private cellEditor: HTMLTextAreaElement | null;
@@ -33,16 +34,6 @@ export class Grid {
   private rangeStartRow: number;
   private rangeStartColumn: number;
 
-  private isResizingColumn: boolean;
-  private resizingColumnIndex: number | null;
-  private resizingStartX: number;
-  private resizingStartWidth: number;
-
-  private isResizingRow: boolean;
-  private resizingRowIndex: number | null;
-  private resizingStartY: number;
-  private resizingStartHeight: number;
-
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
 
@@ -52,16 +43,6 @@ export class Grid {
     this.isSelectingRange = false;
     this.rangeStartRow = 0;
     this.rangeStartColumn = 0;
-
-    this.isResizingColumn = false;
-    this.resizingColumnIndex = null;
-    this.resizingStartX = 0;
-    this.resizingStartWidth = 0;
-
-    this.isResizingRow = false;
-    this.resizingRowIndex = null;
-    this.resizingStartY = 0;
-    this.resizingStartHeight = 0;
 
     this.statusBar = document.getElementById("statusBar");
     this.cellEditor = document.getElementById(
@@ -87,6 +68,11 @@ export class Grid {
       this.dataStore,
       this.coordinateService,
       this.cellEditor
+    );
+
+    this.resizeService = new ResizeService(
+      this.dataStore,
+      this.commandManager
     );
 
     this.renderer = new GridRenderer(this.canvas, this.dataStore);
@@ -251,14 +237,18 @@ export class Grid {
     const resizeColumnIndex = this.getColumnResizeIndex(mouseX, mouseY);
 
     if (resizeColumnIndex !== null) {
-      this.startColumnResize(resizeColumnIndex, mouseX);
+      this.commitCellEditor();
+      this.resizeService.startColumnResize(resizeColumnIndex, mouseX);
+      this.canvas.style.cursor = "col-resize";
       return;
     }
 
     const resizeRowIndex = this.getRowResizeIndex(mouseX, mouseY);
 
     if (resizeRowIndex !== null) {
-      this.startRowResize(resizeRowIndex, mouseY);
+      this.commitCellEditor();
+      this.resizeService.startRowResize(resizeRowIndex, mouseY);
+      this.canvas.style.cursor = "row-resize";
       return;
     }
 
@@ -304,13 +294,19 @@ export class Grid {
     const mouseX = mousePosition.x;
     const mouseY = mousePosition.y;
 
-    if (this.isResizingColumn) {
-      this.updateColumnResize(mouseX);
+    if (this.resizeService.isColumnResizeActive()) {
+      this.resizeService.updateColumnResize(mouseX);
+      this.limitScrollPosition();
+      this.render();
+      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
       return;
     }
 
-    if (this.isResizingRow) {
-      this.updateRowResize(mouseY);
+    if (this.resizeService.isRowResizeActive()) {
+      this.resizeService.updateRowResize(mouseY);
+      this.limitScrollPosition();
+      this.render();
+      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
       return;
     }
 
@@ -354,133 +350,25 @@ export class Grid {
   }
 
   private handleMouseUp(): void {
-    if (this.isResizingColumn) {
-      this.finishColumnResize();
+    if (this.resizeService.isColumnResizeActive()) {
+      this.resizeService.finishColumnResize();
+      this.canvas.style.cursor = "default";
+      this.limitScrollPosition();
+      this.render();
+      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
       return;
     }
 
-    if (this.isResizingRow) {
-      this.finishRowResize();
+    if (this.resizeService.isRowResizeActive()) {
+      this.resizeService.finishRowResize();
+      this.canvas.style.cursor = "default";
+      this.limitScrollPosition();
+      this.render();
+      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
       return;
     }
 
     this.isSelectingRange = false;
-  }
-
-  private startColumnResize(columnIndex: number, mouseX: number): void {
-    this.commitCellEditor();
-
-    this.isResizingColumn = true;
-    this.resizingColumnIndex = columnIndex;
-    this.resizingStartX = mouseX;
-    this.resizingStartWidth = this.dataStore.getColumnWidth(columnIndex);
-
-    this.canvas.style.cursor = "col-resize";
-  }
-
-  private updateColumnResize(mouseX: number): void {
-    if (!this.isResizingColumn || this.resizingColumnIndex === null) {
-      return;
-    }
-
-    const deltaX = mouseX - this.resizingStartX;
-
-    const newWidth = Math.max(
-      GridConfig.minColumnWidth,
-      this.resizingStartWidth + deltaX
-    );
-
-    this.dataStore.setColumnWidth(this.resizingColumnIndex, newWidth);
-    this.limitScrollPosition();
-    this.render();
-    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-  }
-
-  private finishColumnResize(): void {
-    if (!this.isResizingColumn || this.resizingColumnIndex === null) {
-      return;
-    }
-
-    const newWidth = this.dataStore.getColumnWidth(this.resizingColumnIndex);
-    const oldWidth = this.resizingStartWidth;
-
-    if (newWidth !== oldWidth) {
-      const command = new ResizeColumnCommand(
-        this.dataStore,
-        this.resizingColumnIndex,
-        oldWidth,
-        newWidth
-      );
-
-      this.commandManager.execute(command);
-    }
-
-    this.isResizingColumn = false;
-    this.resizingColumnIndex = null;
-    this.resizingStartX = 0;
-    this.resizingStartWidth = 0;
-
-    this.canvas.style.cursor = "default";
-    this.render();
-    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-  }
-
-  private startRowResize(rowIndex: number, mouseY: number): void {
-    this.commitCellEditor();
-
-    this.isResizingRow = true;
-    this.resizingRowIndex = rowIndex;
-    this.resizingStartY = mouseY;
-    this.resizingStartHeight = this.dataStore.getRowHeight(rowIndex);
-
-    this.canvas.style.cursor = "row-resize";
-  }
-
-  private updateRowResize(mouseY: number): void {
-    if (!this.isResizingRow || this.resizingRowIndex === null) {
-      return;
-    }
-
-    const deltaY = mouseY - this.resizingStartY;
-
-    const newHeight = Math.max(
-      GridConfig.minRowHeight,
-      this.resizingStartHeight + deltaY
-    );
-
-    this.dataStore.setRowHeight(this.resizingRowIndex, newHeight);
-    this.limitScrollPosition();
-    this.render();
-    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-  }
-
-  private finishRowResize(): void {
-    if (!this.isResizingRow || this.resizingRowIndex === null) {
-      return;
-    }
-
-    const newHeight = this.dataStore.getRowHeight(this.resizingRowIndex);
-    const oldHeight = this.resizingStartHeight;
-
-    if (newHeight !== oldHeight) {
-      const command = new ResizeRowCommand(
-        this.dataStore,
-        this.resizingRowIndex,
-        oldHeight,
-        newHeight
-      );
-
-      this.commandManager.execute(command);
-    }
-
-    this.isResizingRow = false;
-    this.resizingRowIndex = null;
-    this.resizingStartY = 0;
-    this.resizingStartHeight = 0;
-
-    this.canvas.style.cursor = "default";
-    this.render();
-    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
   }
 
   private getColumnResizeIndex(mouseX: number, mouseY: number): number | null {
