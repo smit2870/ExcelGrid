@@ -9,6 +9,7 @@ import { EditCellCommand } from "../commands/EditCellCommand";
 import { ResizeColumnCommand } from "../commands/ResizeColumnCommand";
 import { ResizeRowCommand } from "../commands/ResizeRowCommand";
 import type { CellValue } from "./GridDataStore";
+import { SelectionStatisticsService, type SelectionStatistics } from "../services/SelectionStatisticsService";
 
 export class Grid {
   private canvas: HTMLCanvasElement;
@@ -907,16 +908,27 @@ export class Grid {
     this.render();
   }
 
+  private formatStatistics(statistics: SelectionStatistics): string {
+    return `Count: ${statistics.count} | Sum: ${statistics.sum} | Avg: ${statistics.average} | Min: ${statistics.min ?? "-"} | Max: ${statistics.max ?? "-"}`;
+  }
+
   private updateCellStatusBar(rowIndex: number, columnIndex: number): void {
     if (!this.statusBar) {
       return;
     }
 
+    const selection = this.selectionService.getSelection();
+
+    const statistics = SelectionStatisticsService.calculate(
+      selection,
+      this.dataStore
+    );
+
     const columnName = CanvasUtils.getColumnName(columnIndex);
     const rowNumber = rowIndex + 1;
     const selectedCellName = `${columnName}${rowNumber}`;
 
-    this.statusBar.textContent = `Selected Cell: ${selectedCellName} | Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -`;
+    this.statusBar.textContent = `Selected Cell: ${selectedCellName} | ${this.formatStatistics(statistics)}`;
   }
 
   private updateRowStatusBar(rowIndex: number): void {
@@ -924,9 +936,17 @@ export class Grid {
       return;
     }
 
+    const selection = this.selectionService.getSelection();
+
+    const statistics = SelectionStatisticsService.calculate(
+      selection,
+      this.dataStore
+    );
+
     const rowNumber = rowIndex + 1;
 
-    this.statusBar.textContent = `Selected Row: ${rowNumber} | Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -`;
+    this.statusBar.textContent =
+      `Selected Row: ${rowNumber} | ${this.formatStatistics(statistics)}`;
   }
 
   private updateColumnStatusBar(columnIndex: number): void {
@@ -934,9 +954,17 @@ export class Grid {
       return;
     }
 
+    const selection = this.selectionService.getSelection();
+
+    const statistics = SelectionStatisticsService.calculate(
+      selection,
+      this.dataStore
+    );
+
     const columnName = CanvasUtils.getColumnName(columnIndex);
 
-    this.statusBar.textContent = `Selected Column: ${columnName} | Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -`;
+    this.statusBar.textContent =
+      `Selected Column: ${columnName} | ${this.formatStatistics(statistics)}`;
   }
 
   private updateRangeStatusBar(
@@ -958,11 +986,21 @@ export class Grid {
       normalizedStartColumn
     )}${normalizedStartRow + 1}`;
 
-    const endCellName = `${CanvasUtils.getColumnName(normalizedEndColumn)}${
-      normalizedEndRow + 1
-    }`;
+    const endCellName = `${CanvasUtils.getColumnName(
+      normalizedEndColumn
+    )}${normalizedEndRow + 1}`;
 
-    this.statusBar.textContent = `Selected Range: ${startCellName}:${endCellName} | Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -`;
+    const selection = this.selectionService.getSelection();
+
+    const statistics = SelectionStatisticsService.calculate(
+      selection,
+      this.dataStore
+    );
+
+    this.statusBar.textContent =
+      `Selected Range: ${startCellName}:${endCellName} | ${this.formatStatistics(
+        statistics
+      )}`;
   }
 
   private resetStatusBar(): void {
@@ -970,8 +1008,13 @@ export class Grid {
       return;
     }
 
-    this.statusBar.textContent =
-      "Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -";
+    this.statusBar.textContent = this.formatStatistics({
+      count: 0,
+      sum: 0,
+      average: 0,
+      min: null,
+      max: null
+    });
   }
 
   private getTotalColumnsWidth(): number {
@@ -1002,15 +1045,15 @@ export class Grid {
     const maxScrollX = Math.max(
       0,
       this.getTotalColumnsWidth() -
-        this.canvas.clientWidth +
-        GridConfig.rowHeaderWidth
+      this.canvas.clientWidth +
+      GridConfig.rowHeaderWidth
     );
 
     const maxScrollY = Math.max(
       0,
       this.getTotalRowsHeight() -
-        this.canvas.clientHeight +
-        GridConfig.columnHeaderHeight
+      this.canvas.clientHeight +
+      GridConfig.columnHeaderHeight
     );
 
     this.scrollX = Math.max(0, Math.min(this.scrollX, maxScrollX));
