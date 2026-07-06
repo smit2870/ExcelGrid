@@ -14,6 +14,7 @@ import { CanvasUtils } from "../utils/CanvasUtils";
 
 import { CommandManager } from "../commands/CommandManager";
 import { EditCellCommand } from "../commands/EditCellCommand";
+import { ClearCellsCommand } from "../commands/ClearCellsCommand";
 
 import { MouseHandler } from "../events/MouseHandler";
 import { KeyboardHandler } from "../events/KeyboardHandler";
@@ -258,6 +259,12 @@ export class Grid {
     }
 
     if (this.cellEditorService.isEditing()) {
+      return;
+    }
+
+    if (event.key === "Delete") {
+      event.preventDefault();
+      this.clearSelectedCells();
       return;
     }
 
@@ -604,6 +611,58 @@ export class Grid {
       navigationResult.columnIndex,
       this.scrollX,
       this.scrollY
+    );
+  }
+
+  private clearSelectedCells(): void {
+    const selection = this.selectionService.getSelection();
+
+    if (!selection) {
+      return;
+    }
+
+    const startRow = Math.min(selection.startRow, selection.endRow);
+    const endRow = Math.max(selection.startRow, selection.endRow);
+    const startColumn = Math.min(selection.startColumn, selection.endColumn);
+    const endColumn = Math.max(selection.startColumn, selection.endColumn);
+
+    const cellsToClear: Array<{
+      rowIndex: number;
+      columnIndex: number;
+      oldValue: CellValue;
+    }> = [];
+
+    for (let rowIndex = startRow; rowIndex <= endRow; rowIndex++) {
+      for (
+        let columnIndex = startColumn;
+        columnIndex <= endColumn;
+        columnIndex++
+      ) {
+        const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
+
+        if (oldValue === null) {
+          continue;
+        }
+
+        cellsToClear.push({
+          rowIndex,
+          columnIndex,
+          oldValue
+        });
+      }
+    }
+
+    if (cellsToClear.length === 0) {
+      return;
+    }
+
+    const command = new ClearCellsCommand(this.dataStore, cellsToClear);
+
+    this.commandManager.execute(command);
+    this.render();
+
+    this.statusBarService.updateForSelection(
+      this.selectionService.getSelection()
     );
   }
 
