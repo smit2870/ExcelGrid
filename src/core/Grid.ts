@@ -8,6 +8,7 @@ import { CommandManager } from "../commands/CommandManager";
 import { EditCellCommand } from "../commands/EditCellCommand";
 import { ResizeColumnCommand } from "../commands/ResizeColumnCommand";
 import { ResizeRowCommand } from "../commands/ResizeRowCommand";
+import { CoordinateService } from "../services/CoordinateService";
 import type { CellValue } from "./GridDataStore";
 import {
   SelectionStatisticsService,
@@ -20,6 +21,7 @@ export class Grid {
   private renderer: GridRenderer;
   private selectionService: SelectionService;
   private commandManager: CommandManager;
+  private coordinateService: CoordinateService;
   private statusBar: HTMLElement | null;
   private cellEditor: HTMLTextAreaElement | null;
 
@@ -78,6 +80,7 @@ export class Grid {
 
     this.selectionService = new SelectionService();
     this.commandManager = new CommandManager();
+    this.coordinateService = new CoordinateService(this.canvas, this.dataStore);
     this.renderer = new GridRenderer(this.canvas, this.dataStore);
 
     this.initializeCanvas();
@@ -462,119 +465,30 @@ export class Grid {
   }
 
   private getColumnResizeIndex(mouseX: number, mouseY: number): number | null {
-    if (mouseY > GridConfig.columnHeaderHeight) {
-      return null;
-    }
-
-    if (mouseX < GridConfig.rowHeaderWidth) {
-      return null;
-    }
-
-    const resizeThreshold = 5;
-    let currentX = GridConfig.rowHeaderWidth - this.scrollX;
-
-    for (
-      let columnIndex = 0;
-      columnIndex < GridConfig.totalColumns;
-      columnIndex++
-    ) {
-      const columnWidth = this.dataStore.getColumnWidth(columnIndex);
-      const columnRightEdge = currentX + columnWidth;
-
-      if (Math.abs(mouseX - columnRightEdge) <= resizeThreshold) {
-        return columnIndex;
-      }
-
-      currentX += columnWidth;
-
-      if (currentX > this.canvas.clientWidth + resizeThreshold) {
-        break;
-      }
-    }
-
-    return null;
+    return this.coordinateService.getColumnResizeIndex(
+      mouseX,
+      mouseY,
+      this.scrollX
+    );
   }
 
   private getRowResizeIndex(mouseX: number, mouseY: number): number | null {
-    if (mouseX > GridConfig.rowHeaderWidth) {
-      return null;
-    }
-
-    if (mouseY < GridConfig.columnHeaderHeight) {
-      return null;
-    }
-
-    const resizeThreshold = 5;
-    let currentY = GridConfig.columnHeaderHeight - this.scrollY;
-
-    for (let rowIndex = 0; rowIndex < GridConfig.totalRows; rowIndex++) {
-      const rowHeight = this.dataStore.getRowHeight(rowIndex);
-      const rowBottomEdge = currentY + rowHeight;
-
-      if (Math.abs(mouseY - rowBottomEdge) <= resizeThreshold) {
-        return rowIndex;
-      }
-
-      currentY += rowHeight;
-
-      if (currentY > this.canvas.clientHeight + resizeThreshold) {
-        break;
-      }
-    }
-
-    return null;
+    return this.coordinateService.getRowResizeIndex(
+      mouseX,
+      mouseY,
+      this.scrollY
+    );
   }
 
   private getColumnIndexFromMouseX(mouseX: number): number | null {
-    if (mouseX < GridConfig.rowHeaderWidth) {
-      return null;
-    }
-
-    let currentX = GridConfig.rowHeaderWidth - this.scrollX;
-
-    for (
-      let columnIndex = 0;
-      columnIndex < GridConfig.totalColumns;
-      columnIndex++
-    ) {
-      const columnWidth = this.dataStore.getColumnWidth(columnIndex);
-
-      if (mouseX >= currentX && mouseX <= currentX + columnWidth) {
-        return columnIndex;
-      }
-
-      currentX += columnWidth;
-
-      if (currentX > this.canvas.clientWidth) {
-        break;
-      }
-    }
-
-    return null;
+    return this.coordinateService.getColumnIndexFromMouseX(
+      mouseX,
+      this.scrollX
+    );
   }
 
   private getRowIndexFromMouseY(mouseY: number): number | null {
-    if (mouseY < GridConfig.columnHeaderHeight) {
-      return null;
-    }
-
-    let currentY = GridConfig.columnHeaderHeight - this.scrollY;
-
-    for (let rowIndex = 0; rowIndex < GridConfig.totalRows; rowIndex++) {
-      const rowHeight = this.dataStore.getRowHeight(rowIndex);
-
-      if (mouseY >= currentY && mouseY <= currentY + rowHeight) {
-        return rowIndex;
-      }
-
-      currentY += rowHeight;
-
-      if (currentY > this.canvas.clientHeight) {
-        break;
-      }
-    }
-
-    return null;
+    return this.coordinateService.getRowIndexFromMouseY(mouseY, this.scrollY);
   }
 
   private handleDoubleClick(event: MouseEvent): void {
@@ -736,39 +650,13 @@ export class Grid {
   private getColumnBounds(
     columnIndex: number
   ): { x: number; width: number } | null {
-    if (columnIndex < 0 || columnIndex >= GridConfig.totalColumns) {
-      return null;
-    }
-
-    let x = GridConfig.rowHeaderWidth - this.scrollX;
-
-    for (let index = 0; index < columnIndex; index++) {
-      x += this.dataStore.getColumnWidth(index);
-    }
-
-    return {
-      x,
-      width: this.dataStore.getColumnWidth(columnIndex)
-    };
+    return this.coordinateService.getColumnBounds(columnIndex, this.scrollX);
   }
 
   private getRowBounds(
     rowIndex: number
   ): { y: number; height: number } | null {
-    if (rowIndex < 0 || rowIndex >= GridConfig.totalRows) {
-      return null;
-    }
-
-    let y = GridConfig.columnHeaderHeight - this.scrollY;
-
-    for (let index = 0; index < rowIndex; index++) {
-      y += this.dataStore.getRowHeight(index);
-    }
-
-    return {
-      y,
-      height: this.dataStore.getRowHeight(rowIndex)
-    };
+    return this.coordinateService.getRowBounds(rowIndex, this.scrollY);
   }
 
   private hideCellEditor(): void {
@@ -1051,27 +939,11 @@ export class Grid {
   }
 
   private getTotalColumnsWidth(): number {
-    let totalWidth = 0;
-
-    for (
-      let columnIndex = 0;
-      columnIndex < GridConfig.totalColumns;
-      columnIndex++
-    ) {
-      totalWidth += this.dataStore.getColumnWidth(columnIndex);
-    }
-
-    return totalWidth;
+    return this.coordinateService.getTotalColumnsWidth();
   }
 
   private getTotalRowsHeight(): number {
-    let totalHeight = 0;
-
-    for (let rowIndex = 0; rowIndex < GridConfig.totalRows; rowIndex++) {
-      totalHeight += this.dataStore.getRowHeight(rowIndex);
-    }
-
-    return totalHeight;
+    return this.coordinateService.getTotalRowsHeight();
   }
 
   private limitScrollPosition(): void {
