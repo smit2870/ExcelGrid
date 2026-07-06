@@ -15,6 +15,7 @@ import { CommandManager } from "../commands/CommandManager";
 import { EditCellCommand } from "../commands/EditCellCommand";
 
 import { MouseHandler } from "../events/MouseHandler";
+import { KeyboardHandler } from "../events/KeyboardHandler";
 
 import type { CellValue } from "./GridDataStore";
 
@@ -29,7 +30,9 @@ export class Grid {
   private statusBarService: StatusBarService;
   private cellEditorService: CellEditorService;
   private resizeService: ResizeService;
+
   private mouseHandler: MouseHandler;
+  private keyboardHandler: KeyboardHandler;
 
   private statusBar: HTMLElement | null;
   private cellEditor: HTMLTextAreaElement | null;
@@ -104,6 +107,18 @@ export class Grid {
       }
     });
 
+    this.keyboardHandler = new KeyboardHandler(
+      this.cellEditorService.getEditorElement(),
+      {
+        onGlobalKeyDown: (event: KeyboardEvent) => {
+          this.handleGlobalKeyDown(event);
+        },
+        onEditorKeyDown: (event: KeyboardEvent) => {
+          this.handleEditorKeyDown(event);
+        }
+      }
+    );
+
     this.renderer = new GridRenderer(this.canvas, this.dataStore);
 
     this.initializeCanvas();
@@ -153,10 +168,7 @@ export class Grid {
 
   private attachEvents(): void {
     this.mouseHandler.attach();
-
-    window.addEventListener("keydown", (event: KeyboardEvent) => {
-      this.handleGlobalKeyDown(event);
-    });
+    this.keyboardHandler.attach();
 
     const undoButton = document.getElementById("undoBtn");
     const redoButton = document.getElementById("redoBtn");
@@ -168,6 +180,7 @@ export class Grid {
         this.limitScrollPosition();
         this.render();
         this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+
         this.statusBarService.updateForSelection(
           this.selectionService.getSelection()
         );
@@ -181,17 +194,10 @@ export class Grid {
         this.limitScrollPosition();
         this.render();
         this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+
         this.statusBarService.updateForSelection(
           this.selectionService.getSelection()
         );
-      });
-    }
-
-    const editorElement = this.cellEditorService.getEditorElement();
-
-    if (editorElement) {
-      editorElement.addEventListener("keydown", (event: KeyboardEvent) => {
-        this.handleEditorKeyDown(event);
       });
     }
   }
@@ -219,9 +225,11 @@ export class Grid {
       this.limitScrollPosition();
       this.render();
       this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+
       this.statusBarService.updateForSelection(
         this.selectionService.getSelection()
       );
+
       return;
     }
 
