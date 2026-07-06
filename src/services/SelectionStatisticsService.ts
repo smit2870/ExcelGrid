@@ -1,5 +1,5 @@
 import type { Selection } from "../models/Selection";
-import { GridDataStore } from "../core/GridDataStore";
+import type { GridDataStore } from "../core/GridDataStore";
 
 export interface SelectionStatistics {
     count: number;

@@ -9,7 +9,10 @@ import { EditCellCommand } from "../commands/EditCellCommand";
 import { ResizeColumnCommand } from "../commands/ResizeColumnCommand";
 import { ResizeRowCommand } from "../commands/ResizeRowCommand";
 import type { CellValue } from "./GridDataStore";
-import { SelectionStatisticsService, type SelectionStatistics } from "../services/SelectionStatisticsService";
+import {
+  SelectionStatisticsService,
+  type SelectionStatistics
+} from "../services/SelectionStatisticsService";
 
 export class Grid {
   private canvas: HTMLCanvasElement;
@@ -168,6 +171,7 @@ export class Grid {
         this.limitScrollPosition();
         this.render();
         this.updateCellEditorPosition();
+        this.refreshCurrentSelectionStatusBar();
       });
     }
 
@@ -178,6 +182,7 @@ export class Grid {
         this.limitScrollPosition();
         this.render();
         this.updateCellEditorPosition();
+        this.refreshCurrentSelectionStatusBar();
       });
     }
 
@@ -200,6 +205,7 @@ export class Grid {
       this.limitScrollPosition();
       this.render();
       this.updateCellEditorPosition();
+      this.refreshCurrentSelectionStatusBar();
       return;
     }
 
@@ -211,6 +217,7 @@ export class Grid {
       this.limitScrollPosition();
       this.render();
       this.updateCellEditorPosition();
+      this.refreshCurrentSelectionStatusBar();
     }
   }
 
@@ -713,14 +720,6 @@ export class Grid {
       this.cellEditor.style.visibility = "visible";
       this.cellEditor.style.opacity = "0";
       this.cellEditor.style.pointerEvents = "none";
-
-      if (document.activeElement !== this.cellEditor) {
-        this.cellEditor.focus();
-
-        const valueLength = this.cellEditor.value.length;
-        this.cellEditor.setSelectionRange(valueLength, valueLength);
-      }
-
       return;
     }
 
@@ -732,13 +731,6 @@ export class Grid {
     this.cellEditor.style.top = `${cellY}px`;
     this.cellEditor.style.width = `${columnBounds.width}px`;
     this.cellEditor.style.height = `${rowBounds.height}px`;
-
-    if (document.activeElement !== this.cellEditor) {
-      this.cellEditor.focus();
-
-      const valueLength = this.cellEditor.value.length;
-      this.cellEditor.setSelectionRange(valueLength, valueLength);
-    }
   }
 
   private getColumnBounds(
@@ -845,6 +837,7 @@ export class Grid {
 
     this.hideCellEditor();
     this.render();
+    this.refreshCurrentSelectionStatusBar();
   }
 
   private handleEditorKeyDown(event: KeyboardEvent): void {
@@ -909,7 +902,44 @@ export class Grid {
   }
 
   private formatStatistics(statistics: SelectionStatistics): string {
-    return `Count: ${statistics.count} | Sum: ${statistics.sum} | Avg: ${statistics.average} | Min: ${statistics.min ?? "-"} | Max: ${statistics.max ?? "-"}`;
+    const average =
+      statistics.count === 0 ? "-" : Number(statistics.average.toFixed(2));
+
+    return `Count: ${statistics.count} | Sum: ${statistics.sum} | Avg: ${average} | Min: ${statistics.min ?? "-"
+      } | Max: ${statistics.max ?? "-"}`;
+  }
+
+  private refreshCurrentSelectionStatusBar(): void {
+    const selection = this.selectionService.getSelection();
+
+    if (!selection) {
+      this.resetStatusBar();
+      return;
+    }
+
+    if (selection.type === "cell") {
+      this.updateCellStatusBar(selection.startRow, selection.startColumn);
+      return;
+    }
+
+    if (selection.type === "row") {
+      this.updateRowStatusBar(selection.startRow);
+      return;
+    }
+
+    if (selection.type === "column") {
+      this.updateColumnStatusBar(selection.startColumn);
+      return;
+    }
+
+    if (selection.type === "range") {
+      this.updateRangeStatusBar(
+        selection.startRow,
+        selection.startColumn,
+        selection.endRow,
+        selection.endColumn
+      );
+    }
   }
 
   private updateCellStatusBar(rowIndex: number, columnIndex: number): void {
@@ -928,7 +958,9 @@ export class Grid {
     const rowNumber = rowIndex + 1;
     const selectedCellName = `${columnName}${rowNumber}`;
 
-    this.statusBar.textContent = `Selected Cell: ${selectedCellName} | ${this.formatStatistics(statistics)}`;
+    this.statusBar.textContent = `Selected Cell: ${selectedCellName} | ${this.formatStatistics(
+      statistics
+    )}`;
   }
 
   private updateRowStatusBar(rowIndex: number): void {
@@ -945,8 +977,9 @@ export class Grid {
 
     const rowNumber = rowIndex + 1;
 
-    this.statusBar.textContent =
-      `Selected Row: ${rowNumber} | ${this.formatStatistics(statistics)}`;
+    this.statusBar.textContent = `Selected Row: ${rowNumber} | ${this.formatStatistics(
+      statistics
+    )}`;
   }
 
   private updateColumnStatusBar(columnIndex: number): void {
@@ -963,8 +996,9 @@ export class Grid {
 
     const columnName = CanvasUtils.getColumnName(columnIndex);
 
-    this.statusBar.textContent =
-      `Selected Column: ${columnName} | ${this.formatStatistics(statistics)}`;
+    this.statusBar.textContent = `Selected Column: ${columnName} | ${this.formatStatistics(
+      statistics
+    )}`;
   }
 
   private updateRangeStatusBar(
@@ -997,10 +1031,9 @@ export class Grid {
       this.dataStore
     );
 
-    this.statusBar.textContent =
-      `Selected Range: ${startCellName}:${endCellName} | ${this.formatStatistics(
-        statistics
-      )}`;
+    this.statusBar.textContent = `Selected Range: ${startCellName}:${endCellName} | ${this.formatStatistics(
+      statistics
+    )}`;
   }
 
   private resetStatusBar(): void {
