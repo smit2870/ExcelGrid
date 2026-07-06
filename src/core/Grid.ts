@@ -10,6 +10,7 @@ import { ResizeColumnCommand } from "../commands/ResizeColumnCommand";
 import { ResizeRowCommand } from "../commands/ResizeRowCommand";
 import { CoordinateService } from "../services/CoordinateService";
 import { StatusBarService } from "../services/StatusBarService";
+import { CellEditorService } from "../services/CellEditorService";
 import type { CellValue } from "./GridDataStore";
 
 export class Grid {
@@ -20,6 +21,8 @@ export class Grid {
   private commandManager: CommandManager;
   private coordinateService: CoordinateService;
   private statusBarService: StatusBarService;
+  private cellEditorService: CellEditorService;
+
   private statusBar: HTMLElement | null;
   private cellEditor: HTMLTextAreaElement | null;
 
@@ -29,9 +32,6 @@ export class Grid {
   private isSelectingRange: boolean;
   private rangeStartRow: number;
   private rangeStartColumn: number;
-
-  private editingRow: number | null;
-  private editingColumn: number | null;
 
   private isResizingColumn: boolean;
   private resizingColumnIndex: number | null;
@@ -52,9 +52,6 @@ export class Grid {
     this.isSelectingRange = false;
     this.rangeStartRow = 0;
     this.rangeStartColumn = 0;
-
-    this.editingRow = null;
-    this.editingColumn = null;
 
     this.isResizingColumn = false;
     this.resizingColumnIndex = null;
@@ -79,10 +76,19 @@ export class Grid {
     this.selectionService = new SelectionService();
     this.commandManager = new CommandManager();
     this.coordinateService = new CoordinateService(this.canvas, this.dataStore);
+
     this.statusBarService = new StatusBarService(
       this.statusBar,
       this.dataStore
     );
+
+    this.cellEditorService = new CellEditorService(
+      this.canvas,
+      this.dataStore,
+      this.coordinateService,
+      this.cellEditor
+    );
+
     this.renderer = new GridRenderer(this.canvas, this.dataStore);
 
     this.initializeCanvas();
@@ -98,7 +104,7 @@ export class Grid {
       this.resizeCanvas();
       this.limitScrollPosition();
       this.render();
-      this.updateCellEditorPosition();
+      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
     });
   }
 
@@ -142,7 +148,7 @@ export class Grid {
 
         this.limitScrollPosition();
         this.render();
-        this.updateCellEditorPosition();
+        this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
       });
     }
 
@@ -175,7 +181,7 @@ export class Grid {
         this.commandManager.undo();
         this.limitScrollPosition();
         this.render();
-        this.updateCellEditorPosition();
+        this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
         this.statusBarService.updateForSelection(
           this.selectionService.getSelection()
         );
@@ -188,15 +194,17 @@ export class Grid {
         this.commandManager.redo();
         this.limitScrollPosition();
         this.render();
-        this.updateCellEditorPosition();
+        this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
         this.statusBarService.updateForSelection(
           this.selectionService.getSelection()
         );
       });
     }
 
-    if (this.cellEditor) {
-      this.cellEditor.addEventListener("keydown", (event: KeyboardEvent) => {
+    const editorElement = this.cellEditorService.getEditorElement();
+
+    if (editorElement) {
+      editorElement.addEventListener("keydown", (event: KeyboardEvent) => {
         this.handleEditorKeyDown(event);
       });
     }
@@ -213,7 +221,7 @@ export class Grid {
       this.commandManager.undo();
       this.limitScrollPosition();
       this.render();
-      this.updateCellEditorPosition();
+      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
       this.statusBarService.updateForSelection(
         this.selectionService.getSelection()
       );
@@ -227,7 +235,7 @@ export class Grid {
       this.commandManager.redo();
       this.limitScrollPosition();
       this.render();
-      this.updateCellEditorPosition();
+      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
       this.statusBarService.updateForSelection(
         this.selectionService.getSelection()
       );
@@ -385,7 +393,7 @@ export class Grid {
     this.dataStore.setColumnWidth(this.resizingColumnIndex, newWidth);
     this.limitScrollPosition();
     this.render();
-    this.updateCellEditorPosition();
+    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
   }
 
   private finishColumnResize(): void {
@@ -414,7 +422,7 @@ export class Grid {
 
     this.canvas.style.cursor = "default";
     this.render();
-    this.updateCellEditorPosition();
+    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
   }
 
   private startRowResize(rowIndex: number, mouseY: number): void {
@@ -443,7 +451,7 @@ export class Grid {
     this.dataStore.setRowHeight(this.resizingRowIndex, newHeight);
     this.limitScrollPosition();
     this.render();
-    this.updateCellEditorPosition();
+    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
   }
 
   private finishRowResize(): void {
@@ -472,7 +480,7 @@ export class Grid {
 
     this.canvas.style.cursor = "default";
     this.render();
-    this.updateCellEditorPosition();
+    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
   }
 
   private getColumnResizeIndex(mouseX: number, mouseY: number): number | null {
@@ -527,7 +535,12 @@ export class Grid {
 
     this.render();
 
-    this.showCellEditor(cellPosition.rowIndex, cellPosition.columnIndex);
+    this.cellEditorService.show(
+      cellPosition.rowIndex,
+      cellPosition.columnIndex,
+      this.scrollX,
+      this.scrollY
+    );
   }
 
   private startRangeSelection(mouseX: number, mouseY: number): void {
@@ -580,126 +593,8 @@ export class Grid {
     };
   }
 
-  private showCellEditor(rowIndex: number, columnIndex: number): void {
-    if (!this.cellEditor) {
-      return;
-    }
-
-    const columnBounds = this.getColumnBounds(columnIndex);
-    const rowBounds = this.getRowBounds(rowIndex);
-
-    if (!columnBounds || !rowBounds) {
-      return;
-    }
-
-    const cellX = columnBounds.x;
-    const cellY = rowBounds.y;
-
-    const isVisible =
-      cellX + columnBounds.width >= GridConfig.rowHeaderWidth &&
-      cellX <= this.canvas.clientWidth &&
-      cellY + rowBounds.height >= GridConfig.columnHeaderHeight &&
-      cellY <= this.canvas.clientHeight;
-
-    if (!isVisible) {
-      return;
-    }
-
-    const currentValue = this.dataStore.getCellValue(rowIndex, columnIndex);
-
-    this.editingRow = rowIndex;
-    this.editingColumn = columnIndex;
-
-    this.cellEditor.value = currentValue === null ? "" : String(currentValue);
-
-    this.cellEditor.style.display = "block";
-    this.cellEditor.style.visibility = "visible";
-    this.cellEditor.style.opacity = "1";
-    this.cellEditor.style.pointerEvents = "auto";
-    this.cellEditor.style.left = `${cellX}px`;
-    this.cellEditor.style.top = `${cellY}px`;
-    this.cellEditor.style.width = `${columnBounds.width}px`;
-    this.cellEditor.style.height = `${rowBounds.height}px`;
-
-    this.cellEditor.focus();
-    this.cellEditor.select();
-  }
-
-  private updateCellEditorPosition(): void {
-    if (!this.cellEditor) {
-      return;
-    }
-
-    if (this.editingRow === null || this.editingColumn === null) {
-      return;
-    }
-
-    const columnBounds = this.getColumnBounds(this.editingColumn);
-    const rowBounds = this.getRowBounds(this.editingRow);
-
-    if (!columnBounds || !rowBounds) {
-      return;
-    }
-
-    const cellX = columnBounds.x;
-    const cellY = rowBounds.y;
-
-    const isVisible =
-      cellX + columnBounds.width >= GridConfig.rowHeaderWidth &&
-      cellX <= this.canvas.clientWidth &&
-      cellY + rowBounds.height >= GridConfig.columnHeaderHeight &&
-      cellY <= this.canvas.clientHeight;
-
-    if (!isVisible) {
-      this.cellEditor.style.display = "block";
-      this.cellEditor.style.visibility = "visible";
-      this.cellEditor.style.opacity = "0";
-      this.cellEditor.style.pointerEvents = "none";
-      return;
-    }
-
-    this.cellEditor.style.display = "block";
-    this.cellEditor.style.visibility = "visible";
-    this.cellEditor.style.opacity = "1";
-    this.cellEditor.style.pointerEvents = "auto";
-    this.cellEditor.style.left = `${cellX}px`;
-    this.cellEditor.style.top = `${cellY}px`;
-    this.cellEditor.style.width = `${columnBounds.width}px`;
-    this.cellEditor.style.height = `${rowBounds.height}px`;
-  }
-
-  private getColumnBounds(
-    columnIndex: number
-  ): { x: number; width: number } | null {
-    return this.coordinateService.getColumnBounds(columnIndex, this.scrollX);
-  }
-
-  private getRowBounds(
-    rowIndex: number
-  ): { y: number; height: number } | null {
-    return this.coordinateService.getRowBounds(rowIndex, this.scrollY);
-  }
-
-  private hideCellEditor(): void {
-    if (!this.cellEditor) {
-      return;
-    }
-
-    this.cellEditor.style.display = "none";
-    this.cellEditor.style.visibility = "visible";
-    this.cellEditor.style.opacity = "1";
-    this.cellEditor.style.pointerEvents = "auto";
-
-    this.editingRow = null;
-    this.editingColumn = null;
-  }
-
   private commitCellEditor(): void {
-    if (!this.cellEditor) {
-      return;
-    }
-
-    if (this.editingRow === null || this.editingColumn === null) {
+    if (!this.cellEditorService.isEditing()) {
       return;
     }
 
@@ -707,19 +602,17 @@ export class Grid {
   }
 
   private saveCellEditorValue(): void {
-    if (!this.cellEditor) {
+    const editingCell = this.cellEditorService.getEditingCell();
+
+    if (!editingCell) {
       return;
     }
 
-    if (this.editingRow === null || this.editingColumn === null) {
-      return;
-    }
+    const rowIndex = editingCell.rowIndex;
+    const columnIndex = editingCell.columnIndex;
 
-    const rowIndex = this.editingRow;
-    const columnIndex = this.editingColumn;
     const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
-
-    const editorValue = this.cellEditor.value.trim();
+    const editorValue = this.cellEditorService.getValue().trim();
 
     let newValue: CellValue;
 
@@ -744,7 +637,7 @@ export class Grid {
       this.commandManager.execute(command);
     }
 
-    this.hideCellEditor();
+    this.cellEditorService.hide();
     this.render();
 
     this.statusBarService.updateForSelection(
@@ -755,22 +648,7 @@ export class Grid {
   private handleEditorKeyDown(event: KeyboardEvent): void {
     if (event.key === "Enter" && event.altKey) {
       event.preventDefault();
-
-      if (!this.cellEditor) {
-        return;
-      }
-
-      const selectionStart = this.cellEditor.selectionStart;
-      const selectionEnd = this.cellEditor.selectionEnd;
-      const currentValue = this.cellEditor.value;
-
-      this.cellEditor.value =
-        currentValue.substring(0, selectionStart) +
-        "\n" +
-        currentValue.substring(selectionEnd);
-
-      const newCursorPosition = selectionStart + 1;
-      this.cellEditor.setSelectionRange(newCursorPosition, newCursorPosition);
+      this.cellEditorService.insertNewLineAtCursor();
       return;
     }
 
@@ -782,7 +660,7 @@ export class Grid {
 
     if (event.key === "Escape") {
       event.preventDefault();
-      this.hideCellEditor();
+      this.cellEditorService.hide();
       this.render();
     }
   }
