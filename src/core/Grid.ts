@@ -9,11 +9,8 @@ import { EditCellCommand } from "../commands/EditCellCommand";
 import { ResizeColumnCommand } from "../commands/ResizeColumnCommand";
 import { ResizeRowCommand } from "../commands/ResizeRowCommand";
 import { CoordinateService } from "../services/CoordinateService";
+import { StatusBarService } from "../services/StatusBarService";
 import type { CellValue } from "./GridDataStore";
-import {
-  SelectionStatisticsService,
-  type SelectionStatistics
-} from "../services/SelectionStatisticsService";
 
 export class Grid {
   private canvas: HTMLCanvasElement;
@@ -22,6 +19,7 @@ export class Grid {
   private selectionService: SelectionService;
   private commandManager: CommandManager;
   private coordinateService: CoordinateService;
+  private statusBarService: StatusBarService;
   private statusBar: HTMLElement | null;
   private cellEditor: HTMLTextAreaElement | null;
 
@@ -81,6 +79,10 @@ export class Grid {
     this.selectionService = new SelectionService();
     this.commandManager = new CommandManager();
     this.coordinateService = new CoordinateService(this.canvas, this.dataStore);
+    this.statusBarService = new StatusBarService(
+      this.statusBar,
+      this.dataStore
+    );
     this.renderer = new GridRenderer(this.canvas, this.dataStore);
 
     this.initializeCanvas();
@@ -174,7 +176,9 @@ export class Grid {
         this.limitScrollPosition();
         this.render();
         this.updateCellEditorPosition();
-        this.refreshCurrentSelectionStatusBar();
+        this.statusBarService.updateForSelection(
+          this.selectionService.getSelection()
+        );
       });
     }
 
@@ -185,7 +189,9 @@ export class Grid {
         this.limitScrollPosition();
         this.render();
         this.updateCellEditorPosition();
-        this.refreshCurrentSelectionStatusBar();
+        this.statusBarService.updateForSelection(
+          this.selectionService.getSelection()
+        );
       });
     }
 
@@ -208,7 +214,9 @@ export class Grid {
       this.limitScrollPosition();
       this.render();
       this.updateCellEditorPosition();
-      this.refreshCurrentSelectionStatusBar();
+      this.statusBarService.updateForSelection(
+        this.selectionService.getSelection()
+      );
       return;
     }
 
@@ -220,7 +228,9 @@ export class Grid {
       this.limitScrollPosition();
       this.render();
       this.updateCellEditorPosition();
-      this.refreshCurrentSelectionStatusBar();
+      this.statusBarService.updateForSelection(
+        this.selectionService.getSelection()
+      );
     }
   }
 
@@ -251,7 +261,7 @@ export class Grid {
     if (isTopLeftCorner) {
       this.commitCellEditor();
       this.selectionService.clearSelection();
-      this.resetStatusBar();
+      this.statusBarService.reset();
       this.render();
       return;
     }
@@ -324,11 +334,12 @@ export class Grid {
       cellPosition.columnIndex
     );
 
-    this.updateRangeStatusBar(
+    this.statusBarService.updateRange(
       this.rangeStartRow,
       this.rangeStartColumn,
       cellPosition.rowIndex,
-      cellPosition.columnIndex
+      cellPosition.columnIndex,
+      this.selectionService.getSelection()
     );
 
     this.render();
@@ -508,7 +519,12 @@ export class Grid {
       cellPosition.columnIndex
     );
 
-    this.updateCellStatusBar(cellPosition.rowIndex, cellPosition.columnIndex);
+    this.statusBarService.updateCell(
+      cellPosition.rowIndex,
+      cellPosition.columnIndex,
+      this.selectionService.getSelection()
+    );
+
     this.render();
 
     this.showCellEditor(cellPosition.rowIndex, cellPosition.columnIndex);
@@ -530,7 +546,12 @@ export class Grid {
       cellPosition.columnIndex
     );
 
-    this.updateCellStatusBar(cellPosition.rowIndex, cellPosition.columnIndex);
+    this.statusBarService.updateCell(
+      cellPosition.rowIndex,
+      cellPosition.columnIndex,
+      this.selectionService.getSelection()
+    );
+
     this.render();
   }
 
@@ -725,7 +746,10 @@ export class Grid {
 
     this.hideCellEditor();
     this.render();
-    this.refreshCurrentSelectionStatusBar();
+
+    this.statusBarService.updateForSelection(
+      this.selectionService.getSelection()
+    );
   }
 
   private handleEditorKeyDown(event: KeyboardEvent): void {
@@ -772,7 +796,12 @@ export class Grid {
 
     this.isSelectingRange = false;
     this.selectionService.setRowSelection(rowIndex);
-    this.updateRowStatusBar(rowIndex);
+
+    this.statusBarService.updateRow(
+      rowIndex,
+      this.selectionService.getSelection()
+    );
+
     this.render();
   }
 
@@ -785,157 +814,13 @@ export class Grid {
 
     this.isSelectingRange = false;
     this.selectionService.setColumnSelection(columnIndex);
-    this.updateColumnStatusBar(columnIndex);
+
+    this.statusBarService.updateColumn(
+      columnIndex,
+      this.selectionService.getSelection()
+    );
+
     this.render();
-  }
-
-  private formatStatistics(statistics: SelectionStatistics): string {
-    const average =
-      statistics.count === 0 ? "-" : Number(statistics.average.toFixed(2));
-
-    return `Count: ${statistics.count} | Sum: ${statistics.sum} | Avg: ${average} | Min: ${statistics.min ?? "-"
-      } | Max: ${statistics.max ?? "-"}`;
-  }
-
-  private refreshCurrentSelectionStatusBar(): void {
-    const selection = this.selectionService.getSelection();
-
-    if (!selection) {
-      this.resetStatusBar();
-      return;
-    }
-
-    if (selection.type === "cell") {
-      this.updateCellStatusBar(selection.startRow, selection.startColumn);
-      return;
-    }
-
-    if (selection.type === "row") {
-      this.updateRowStatusBar(selection.startRow);
-      return;
-    }
-
-    if (selection.type === "column") {
-      this.updateColumnStatusBar(selection.startColumn);
-      return;
-    }
-
-    if (selection.type === "range") {
-      this.updateRangeStatusBar(
-        selection.startRow,
-        selection.startColumn,
-        selection.endRow,
-        selection.endColumn
-      );
-    }
-  }
-
-  private updateCellStatusBar(rowIndex: number, columnIndex: number): void {
-    if (!this.statusBar) {
-      return;
-    }
-
-    const selection = this.selectionService.getSelection();
-
-    const statistics = SelectionStatisticsService.calculate(
-      selection,
-      this.dataStore
-    );
-
-    const columnName = CanvasUtils.getColumnName(columnIndex);
-    const rowNumber = rowIndex + 1;
-    const selectedCellName = `${columnName}${rowNumber}`;
-
-    this.statusBar.textContent = `Selected Cell: ${selectedCellName} | ${this.formatStatistics(
-      statistics
-    )}`;
-  }
-
-  private updateRowStatusBar(rowIndex: number): void {
-    if (!this.statusBar) {
-      return;
-    }
-
-    const selection = this.selectionService.getSelection();
-
-    const statistics = SelectionStatisticsService.calculate(
-      selection,
-      this.dataStore
-    );
-
-    const rowNumber = rowIndex + 1;
-
-    this.statusBar.textContent = `Selected Row: ${rowNumber} | ${this.formatStatistics(
-      statistics
-    )}`;
-  }
-
-  private updateColumnStatusBar(columnIndex: number): void {
-    if (!this.statusBar) {
-      return;
-    }
-
-    const selection = this.selectionService.getSelection();
-
-    const statistics = SelectionStatisticsService.calculate(
-      selection,
-      this.dataStore
-    );
-
-    const columnName = CanvasUtils.getColumnName(columnIndex);
-
-    this.statusBar.textContent = `Selected Column: ${columnName} | ${this.formatStatistics(
-      statistics
-    )}`;
-  }
-
-  private updateRangeStatusBar(
-    startRow: number,
-    startColumn: number,
-    endRow: number,
-    endColumn: number
-  ): void {
-    if (!this.statusBar) {
-      return;
-    }
-
-    const normalizedStartRow = Math.min(startRow, endRow);
-    const normalizedEndRow = Math.max(startRow, endRow);
-    const normalizedStartColumn = Math.min(startColumn, endColumn);
-    const normalizedEndColumn = Math.max(startColumn, endColumn);
-
-    const startCellName = `${CanvasUtils.getColumnName(
-      normalizedStartColumn
-    )}${normalizedStartRow + 1}`;
-
-    const endCellName = `${CanvasUtils.getColumnName(
-      normalizedEndColumn
-    )}${normalizedEndRow + 1}`;
-
-    const selection = this.selectionService.getSelection();
-
-    const statistics = SelectionStatisticsService.calculate(
-      selection,
-      this.dataStore
-    );
-
-    this.statusBar.textContent = `Selected Range: ${startCellName}:${endCellName} | ${this.formatStatistics(
-      statistics
-    )}`;
-  }
-
-  private resetStatusBar(): void {
-    if (!this.statusBar) {
-      return;
-    }
-
-    this.statusBar.textContent = this.formatStatistics({
-      count: 0,
-      sum: 0,
-      average: 0,
-      min: null,
-      max: null
-    });
   }
 
   private getTotalColumnsWidth(): number {
