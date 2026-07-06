@@ -15,13 +15,7 @@ export class SelectionStatisticsService {
         dataStore: GridDataStore
     ): SelectionStatistics {
         if (!selection) {
-            return {
-                count: 0,
-                sum: 0,
-                average: 0,
-                min: null,
-                max: null
-            };
+            return this.getEmptyStatistics();
         }
 
         const startRow = Math.min(selection.startRow, selection.endRow);
@@ -42,26 +36,32 @@ export class SelectionStatisticsService {
         let min: number | null = null;
         let max: number | null = null;
 
-        for (let row = startRow; row <= endRow; row++) {
-            for (let column = startColumn; column <= endColumn; column++) {
-                const value = dataStore.getCellValue(row, column);
+        dataStore.forEachCell((rowIndex, columnIndex, value) => {
+            const isInsideSelectedRows =
+                rowIndex >= startRow && rowIndex <= endRow;
 
-                if (typeof value !== "number") {
-                    continue;
-                }
+            const isInsideSelectedColumns =
+                columnIndex >= startColumn && columnIndex <= endColumn;
 
-                count++;
-                sum += value;
-
-                if (min === null || value < min) {
-                    min = value;
-                }
-
-                if (max === null || value > max) {
-                    max = value;
-                }
+            if (!isInsideSelectedRows || !isInsideSelectedColumns) {
+                return;
             }
-        }
+
+            if (typeof value !== "number") {
+                return;
+            }
+
+            count++;
+            sum += value;
+
+            if (min === null || value < min) {
+                min = value;
+            }
+
+            if (max === null || value > max) {
+                max = value;
+            }
+        });
 
         return {
             count,
@@ -69,6 +69,16 @@ export class SelectionStatisticsService {
             average: count === 0 ? 0 : sum / count,
             min,
             max
+        };
+    }
+
+    private static getEmptyStatistics(): SelectionStatistics {
+        return {
+            count: 0,
+            sum: 0,
+            average: 0,
+            min: null,
+            max: null
         };
     }
 }
