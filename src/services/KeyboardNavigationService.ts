@@ -10,6 +10,15 @@ export interface KeyboardNavigationResult {
     scrollY: number;
 }
 
+export interface KeyboardRangeNavigationResult {
+    startRow: number;
+    startColumn: number;
+    endRow: number;
+    endColumn: number;
+    scrollX: number;
+    scrollY: number;
+}
+
 export class KeyboardNavigationService {
     private canvas: HTMLCanvasElement;
     private selectionService: SelectionService;
@@ -32,8 +41,7 @@ export class KeyboardNavigationService {
         scrollY: number
     ): KeyboardNavigationResult {
         const selection = this.selectionService.getSelection();
-
-        const currentCell = this.getBaseCellFromSelection(selection);
+        const currentCell = this.getActiveCellFromSelection(selection);
 
         const nextRow = Math.max(
             0,
@@ -65,13 +73,60 @@ export class KeyboardNavigationService {
         };
     }
 
+    extendSelectedRange(
+        rowDelta: number,
+        columnDelta: number,
+        scrollX: number,
+        scrollY: number
+    ): KeyboardRangeNavigationResult {
+        const selection = this.selectionService.getSelection();
+
+        const anchorCell = this.getAnchorCellFromSelection(selection);
+        const activeCell = this.getActiveCellFromSelection(selection);
+
+        const nextEndRow = Math.max(
+            0,
+            Math.min(GridConfig.totalRows - 1, activeCell.rowIndex + rowDelta)
+        );
+
+        const nextEndColumn = Math.max(
+            0,
+            Math.min(
+                GridConfig.totalColumns - 1,
+                activeCell.columnIndex + columnDelta
+            )
+        );
+
+        this.selectionService.setRangeSelection(
+            anchorCell.rowIndex,
+            anchorCell.columnIndex,
+            nextEndRow,
+            nextEndColumn
+        );
+
+        const updatedScroll = this.ensureCellVisible(
+            nextEndRow,
+            nextEndColumn,
+            scrollX,
+            scrollY
+        );
+
+        return {
+            startRow: anchorCell.rowIndex,
+            startColumn: anchorCell.columnIndex,
+            endRow: nextEndRow,
+            endColumn: nextEndColumn,
+            scrollX: updatedScroll.scrollX,
+            scrollY: updatedScroll.scrollY
+        };
+    }
+
     prepareSelectedCellForEditing(
         scrollX: number,
         scrollY: number
     ): KeyboardNavigationResult {
         const selection = this.selectionService.getSelection();
-
-        const selectedCell = this.getBaseCellFromSelection(selection);
+        const selectedCell = this.getActiveCellFromSelection(selection);
 
         this.selectionService.setCellSelection(
             selectedCell.rowIndex,
@@ -130,7 +185,8 @@ export class KeyboardNavigationService {
         }
 
         if (rowBounds.y + rowBounds.height > this.canvas.clientHeight) {
-            updatedScrollY += rowBounds.y + rowBounds.height - this.canvas.clientHeight;
+            updatedScrollY +=
+                rowBounds.y + rowBounds.height - this.canvas.clientHeight;
         }
 
         return {
@@ -139,7 +195,7 @@ export class KeyboardNavigationService {
         };
     }
 
-    private getBaseCellFromSelection(
+    private getAnchorCellFromSelection(
         selection: Selection | null
     ): { rowIndex: number; columnIndex: number } {
         if (!selection) {
@@ -152,6 +208,22 @@ export class KeyboardNavigationService {
         return {
             rowIndex: selection.startRow,
             columnIndex: selection.startColumn
+        };
+    }
+
+    private getActiveCellFromSelection(
+        selection: Selection | null
+    ): { rowIndex: number; columnIndex: number } {
+        if (!selection) {
+            return {
+                rowIndex: 0,
+                columnIndex: 0
+            };
+        }
+
+        return {
+            rowIndex: selection.endRow,
+            columnIndex: selection.endColumn
         };
     }
 }

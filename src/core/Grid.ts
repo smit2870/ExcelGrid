@@ -268,6 +268,30 @@ export class Grid {
       return;
     }
 
+    if (event.shiftKey && event.key === "ArrowRight") {
+      event.preventDefault();
+      this.extendSelectedRange(0, 1);
+      return;
+    }
+
+    if (event.shiftKey && event.key === "ArrowLeft") {
+      event.preventDefault();
+      this.extendSelectedRange(0, -1);
+      return;
+    }
+
+    if (event.shiftKey && event.key === "ArrowDown") {
+      event.preventDefault();
+      this.extendSelectedRange(1, 0);
+      return;
+    }
+
+    if (event.shiftKey && event.key === "ArrowUp") {
+      event.preventDefault();
+      this.extendSelectedRange(-1, 0);
+      return;
+    }
+
     if (event.key === "ArrowRight") {
       event.preventDefault();
       this.moveSelectedCell(0, 1);
@@ -579,6 +603,31 @@ export class Grid {
     this.statusBarService.updateCell(
       navigationResult.rowIndex,
       navigationResult.columnIndex,
+      this.selectionService.getSelection()
+    );
+
+    this.render();
+    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+  }
+
+  private extendSelectedRange(rowDelta: number, columnDelta: number): void {
+    const navigationResult = this.keyboardNavigationService.extendSelectedRange(
+      rowDelta,
+      columnDelta,
+      this.scrollX,
+      this.scrollY
+    );
+
+    this.scrollX = navigationResult.scrollX;
+    this.scrollY = navigationResult.scrollY;
+
+    this.limitScrollPosition();
+
+    this.statusBarService.updateRange(
+      navigationResult.startRow,
+      navigationResult.startColumn,
+      navigationResult.endRow,
+      navigationResult.endColumn,
       this.selectionService.getSelection()
     );
 
