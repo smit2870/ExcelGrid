@@ -234,6 +234,7 @@ export class Grid {
     const isUndo = event.ctrlKey && event.key.toLowerCase() === "z";
     const isRedo = event.ctrlKey && event.key.toLowerCase() === "y";
     const isCopy = event.ctrlKey && event.key.toLowerCase() === "c";
+    const isCut = event.ctrlKey && event.key.toLowerCase() === "x";
     const isPaste = event.ctrlKey && event.key.toLowerCase() === "v";
 
     if (isUndo) {
@@ -275,6 +276,12 @@ export class Grid {
     if (isCopy) {
       event.preventDefault();
       await this.copySelectedCells();
+      return;
+    }
+
+    if (isCut) {
+      event.preventDefault();
+      await this.cutSelectedCells();
       return;
     }
 
@@ -753,7 +760,33 @@ export class Grid {
       return;
     }
 
-    await navigator.clipboard.writeText(clipboardText);
+    try {
+      await navigator.clipboard.writeText(clipboardText);
+    } catch (error) {
+      console.error("Failed to copy selected cells.", error);
+    }
+  }
+
+  private async cutSelectedCells(): Promise<void> {
+    const selection = this.selectionService.getSelection();
+
+    if (!selection) {
+      return;
+    }
+
+    const clipboardText = this.clipboardService.copySelection(
+      selection,
+      this.dataStore
+    );
+
+    try {
+      await navigator.clipboard.writeText(clipboardText);
+    } catch (error) {
+      console.error("Failed to cut selected cells.", error);
+      return;
+    }
+
+    this.clearSelectedCells();
   }
 
   private async pasteCellsFromClipboard(): Promise<void> {
@@ -763,7 +796,14 @@ export class Grid {
       return;
     }
 
-    const clipboardText = await navigator.clipboard.readText();
+    let clipboardText = "";
+
+    try {
+      clipboardText = await navigator.clipboard.readText();
+    } catch (error) {
+      console.error("Failed to paste cells from clipboard.", error);
+      return;
+    }
 
     if (clipboardText.trim() === "") {
       return;
@@ -827,6 +867,7 @@ export class Grid {
 
     if (startRow === endRow && startColumn === endColumn) {
       this.selectionService.setCellSelection(startRow, startColumn);
+
       this.statusBarService.updateCell(
         startRow,
         startColumn,
