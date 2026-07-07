@@ -9,12 +9,17 @@ import { StatusBarService } from "../services/StatusBarService";
 import { CellEditorService } from "../services/CellEditorService";
 import { ResizeService } from "../services/ResizeService";
 import { KeyboardNavigationService } from "../services/KeyboardNavigationService";
+import { ClipboardService } from "../services/ClipboardService";
 
 import { CanvasUtils } from "../utils/CanvasUtils";
 
 import { CommandManager } from "../commands/CommandManager";
 import { EditCellCommand } from "../commands/EditCellCommand";
 import { ClearCellsCommand } from "../commands/ClearCellsCommand";
+import {
+  PasteCellsCommand,
+  type PastedCell
+} from "../commands/PasteCellsCommand";
 
 import { MouseHandler } from "../events/MouseHandler";
 import { KeyboardHandler } from "../events/KeyboardHandler";
@@ -33,6 +38,7 @@ export class Grid {
   private cellEditorService: CellEditorService;
   private resizeService: ResizeService;
   private keyboardNavigationService: KeyboardNavigationService;
+  private clipboardService: ClipboardService;
 
   private mouseHandler: MouseHandler;
   private keyboardHandler: KeyboardHandler;
@@ -97,6 +103,8 @@ export class Grid {
       this.selectionService,
       this.coordinateService
     );
+
+    this.clipboardService = new ClipboardService();
 
     this.mouseHandler = new MouseHandler(this.canvas, {
       onWheel: (event: WheelEvent) => {
@@ -222,9 +230,11 @@ export class Grid {
     this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
   }
 
-  private handleGlobalKeyDown(event: KeyboardEvent): void {
+  private async handleGlobalKeyDown(event: KeyboardEvent): Promise<void> {
     const isUndo = event.ctrlKey && event.key.toLowerCase() === "z";
     const isRedo = event.ctrlKey && event.key.toLowerCase() === "y";
+    const isCopy = event.ctrlKey && event.key.toLowerCase() === "c";
+    const isPaste = event.ctrlKey && event.key.toLowerCase() === "v";
 
     if (isUndo) {
       event.preventDefault();
@@ -259,6 +269,18 @@ export class Grid {
     }
 
     if (this.cellEditorService.isEditing()) {
+      return;
+    }
+
+    if (isCopy) {
+      event.preventDefault();
+      await this.copySelectedCells();
+      return;
+    }
+
+    if (isPaste) {
+      event.preventDefault();
+      await this.pasteCellsFromClipboard();
       return;
     }
 
@@ -713,6 +735,122 @@ export class Grid {
     this.statusBarService.updateForSelection(
       this.selectionService.getSelection()
     );
+  }
+
+  private async copySelectedCells(): Promise<void> {
+    const selection = this.selectionService.getSelection();
+
+    if (!selection) {
+      return;
+    }
+
+    const clipboardText = this.clipboardService.copySelection(
+      selection,
+      this.dataStore
+    );
+
+    if (clipboardText === "") {
+      return;
+    }
+
+    await navigator.clipboard.writeText(clipboardText);
+  }
+
+  private async pasteCellsFromClipboard(): Promise<void> {
+    const selection = this.selectionService.getSelection();
+
+    if (!selection) {
+      return;
+    }
+
+    const clipboardText = await navigator.clipboard.readText();
+
+    if (clipboardText.trim() === "") {
+      return;
+    }
+
+    const parsedRows = this.clipboardService.parseClipboardText(clipboardText);
+
+    const startRow = selection.startRow;
+    const startColumn = selection.startColumn;
+
+    const pastedCells: PastedCell[] = [];
+
+    for (let rowOffset = 0; rowOffset < parsedRows.length; rowOffset++) {
+      const row = parsedRows[rowOffset];
+
+      for (let columnOffset = 0; columnOffset < row.length; columnOffset++) {
+        const rowIndex = startRow + rowOffset;
+        const columnIndex = startColumn + columnOffset;
+
+        if (
+          rowIndex >= GridConfig.totalRows ||
+          columnIndex >= GridConfig.totalColumns
+        ) {
+          continue;
+        }
+
+        const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
+        const newValue = this.clipboardService.convertTextToCellValue(
+          row[columnOffset]
+        );
+
+        pastedCells.push({
+          rowIndex,
+          columnIndex,
+          oldValue,
+          newValue
+        });
+      }
+    }
+
+    if (pastedCells.length === 0) {
+      return;
+    }
+
+    const command = new PasteCellsCommand(this.dataStore, pastedCells);
+
+    this.commandManager.execute(command);
+
+    const pastedRowCount = parsedRows.length;
+    const pastedColumnCount = Math.max(...parsedRows.map((row) => row.length));
+
+    const endRow = Math.min(
+      GridConfig.totalRows - 1,
+      startRow + pastedRowCount - 1
+    );
+
+    const endColumn = Math.min(
+      GridConfig.totalColumns - 1,
+      startColumn + pastedColumnCount - 1
+    );
+
+    if (startRow === endRow && startColumn === endColumn) {
+      this.selectionService.setCellSelection(startRow, startColumn);
+      this.statusBarService.updateCell(
+        startRow,
+        startColumn,
+        this.selectionService.getSelection()
+      );
+    } else {
+      this.selectionService.setRangeSelection(
+        startRow,
+        startColumn,
+        endRow,
+        endColumn
+      );
+
+      this.statusBarService.updateRange(
+        startRow,
+        startColumn,
+        endRow,
+        endColumn,
+        this.selectionService.getSelection()
+      );
+    }
+
+    this.render();
+    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
   }
 
   private commitCellEditor(): void {
