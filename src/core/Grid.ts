@@ -59,6 +59,8 @@ export class Grid {
   private rangeStartRow: number;
   private rangeStartColumn: number;
 
+  private selectionUiUpdateTimer: number | null;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
 
@@ -68,6 +70,8 @@ export class Grid {
     this.isSelectingRange = false;
     this.rangeStartRow = 0;
     this.rangeStartColumn = 0;
+
+    this.selectionUiUpdateTimer = null;
 
     this.statusBar = document.getElementById("statusBar");
     this.cellEditor = document.getElementById(
@@ -178,6 +182,7 @@ export class Grid {
     this.attachEvents();
     this.render();
     this.updateScrollBars();
+
     this.formulaBarService.updateForSelection(
       this.selectionService.getSelection()
     );
@@ -245,6 +250,7 @@ export class Grid {
         this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
 
         this.updateSelectionDependentUi();
+        this.updateScrollBars();
       });
     }
 
@@ -258,6 +264,7 @@ export class Grid {
         this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
 
         this.updateSelectionDependentUi();
+        this.updateScrollBars();
       });
     }
   }
@@ -277,6 +284,7 @@ export class Grid {
   private async handleGlobalKeyDown(event: KeyboardEvent): Promise<void> {
     const target = event.target as HTMLElement | null;
     const isFormulaBarFocused = target?.id === "formulaBar";
+
     const isUndo = event.ctrlKey && event.key.toLowerCase() === "z";
     const isRedo = event.ctrlKey && event.key.toLowerCase() === "y";
     const isCopy = event.ctrlKey && event.key.toLowerCase() === "c";
@@ -299,6 +307,7 @@ export class Grid {
       this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
 
       this.updateSelectionDependentUi();
+      this.updateScrollBars();
       return;
     }
 
@@ -313,6 +322,7 @@ export class Grid {
       this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
 
       this.updateSelectionDependentUi();
+      this.updateScrollBars();
       return;
     }
 
@@ -530,20 +540,8 @@ export class Grid {
       cellPosition.columnIndex
     );
 
-    this.statusBarService.updateRange(
-      this.rangeStartRow,
-      this.rangeStartColumn,
-      cellPosition.rowIndex,
-      cellPosition.columnIndex,
-      this.selectionService.getSelection()
-    );
-
-    this.formulaBarService.updateForSelection(
-      this.selectionService.getSelection()
-    );
-
     this.render();
-    this.updateScrollBars();
+    this.scheduleSelectionDependentUiUpdate();
   }
 
   private handleMouseUp(): void {
@@ -563,6 +561,13 @@ export class Grid {
       this.limitScrollPosition();
       this.render();
       this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+      this.updateScrollBars();
+      return;
+    }
+
+    if (this.isSelectingRange) {
+      this.isSelectingRange = false;
+      this.flushSelectionDependentUiUpdate();
       this.updateScrollBars();
       return;
     }
@@ -707,21 +712,11 @@ export class Grid {
 
     this.limitScrollPosition();
 
-    this.statusBarService.updateRange(
-      navigationResult.startRow,
-      navigationResult.startColumn,
-      navigationResult.endRow,
-      navigationResult.endColumn,
-      this.selectionService.getSelection()
-    );
-
-    this.formulaBarService.updateForSelection(
-      this.selectionService.getSelection()
-    );
-
     this.render();
     this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
     this.updateScrollBars();
+
+    this.scheduleSelectionDependentUiUpdate();
   }
 
   private startEditingSelectedCell(): void {
@@ -991,13 +986,7 @@ export class Grid {
 
     this.render();
 
-    this.statusBarService.updateForSelection(
-      this.selectionService.getSelection()
-    );
-
-    this.formulaBarService.updateForSelection(
-      this.selectionService.getSelection()
-    );
+    this.updateSelectionDependentUi();
 
     this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
     this.updateScrollBars();
@@ -1112,6 +1101,26 @@ export class Grid {
     this.updateScrollBars();
   }
 
+  private scheduleSelectionDependentUiUpdate(): void {
+    if (this.selectionUiUpdateTimer !== null) {
+      window.clearTimeout(this.selectionUiUpdateTimer);
+    }
+
+    this.selectionUiUpdateTimer = window.setTimeout(() => {
+      this.updateSelectionDependentUi();
+      this.selectionUiUpdateTimer = null;
+    }, 10);  // setting timeout
+  }
+
+  private flushSelectionDependentUiUpdate(): void {
+    if (this.selectionUiUpdateTimer !== null) {
+      window.clearTimeout(this.selectionUiUpdateTimer);
+      this.selectionUiUpdateTimer = null;
+    }
+
+    this.updateSelectionDependentUi();
+  }
+
   private updateSelectionDependentUi(): void {
     const selection = this.selectionService.getSelection();
 
@@ -1131,15 +1140,15 @@ export class Grid {
     const maxScrollX = Math.max(
       0,
       this.getTotalColumnsWidth() -
-      this.canvas.clientWidth +
-      GridConfig.rowHeaderWidth
+        this.canvas.clientWidth +
+        GridConfig.rowHeaderWidth
     );
 
     const maxScrollY = Math.max(
       0,
       this.getTotalRowsHeight() -
-      this.canvas.clientHeight +
-      GridConfig.columnHeaderHeight
+        this.canvas.clientHeight +
+        GridConfig.columnHeaderHeight
     );
 
     this.scrollX = Math.max(0, Math.min(this.scrollX, maxScrollX));
@@ -1150,15 +1159,15 @@ export class Grid {
     const maxScrollX = Math.max(
       0,
       this.getTotalColumnsWidth() -
-      this.canvas.clientWidth +
-      GridConfig.rowHeaderWidth
+        this.canvas.clientWidth +
+        GridConfig.rowHeaderWidth
     );
 
     const maxScrollY = Math.max(
       0,
       this.getTotalRowsHeight() -
-      this.canvas.clientHeight +
-      GridConfig.columnHeaderHeight
+        this.canvas.clientHeight +
+        GridConfig.columnHeaderHeight
     );
 
     this.scrollBarService.update({
