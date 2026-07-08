@@ -11,6 +11,7 @@ import { ResizeService } from "../services/ResizeService";
 import { KeyboardNavigationService } from "../services/KeyboardNavigationService";
 import { ClipboardService } from "../services/ClipboardService";
 import { ScrollBarService } from "../services/ScrollBarService";
+import { FormulaBarService } from "../services/FormulaBarService";
 
 import { CanvasUtils } from "../utils/CanvasUtils";
 
@@ -41,12 +42,15 @@ export class Grid {
   private keyboardNavigationService: KeyboardNavigationService;
   private clipboardService: ClipboardService;
   private scrollBarService: ScrollBarService;
+  private formulaBarService: FormulaBarService;
 
   private mouseHandler: MouseHandler;
   private keyboardHandler: KeyboardHandler;
 
   private statusBar: HTMLElement | null;
   private cellEditor: HTMLTextAreaElement | null;
+  private nameBox: HTMLInputElement | null;
+  private formulaBar: HTMLInputElement | null;
 
   private scrollX: number;
   private scrollY: number;
@@ -69,6 +73,11 @@ export class Grid {
     this.cellEditor = document.getElementById(
       "cellEditor"
     ) as HTMLTextAreaElement | null;
+
+    this.nameBox = document.getElementById("nameBox") as HTMLInputElement | null;
+    this.formulaBar = document.getElementById(
+      "formulaBar"
+    ) as HTMLInputElement | null;
 
     this.dataStore = new GridDataStore(
       GridConfig.defaultRowHeight,
@@ -107,6 +116,12 @@ export class Grid {
     );
 
     this.clipboardService = new ClipboardService();
+
+    this.formulaBarService = new FormulaBarService(
+      this.nameBox,
+      this.formulaBar,
+      this.dataStore
+    );
 
     this.scrollBarService = new ScrollBarService(
       {
@@ -163,6 +178,9 @@ export class Grid {
     this.attachEvents();
     this.render();
     this.updateScrollBars();
+    this.formulaBarService.updateForSelection(
+      this.selectionService.getSelection()
+    );
   }
 
   private initializeCanvas(): void {
@@ -210,6 +228,10 @@ export class Grid {
     this.keyboardHandler.attach();
     this.scrollBarService.attach();
 
+    this.formulaBarService.attach((value: string) => {
+      this.saveFormulaBarValue(value);
+    });
+
     const undoButton = document.getElementById("undoBtn");
     const redoButton = document.getElementById("redoBtn");
 
@@ -217,15 +239,12 @@ export class Grid {
       undoButton.addEventListener("click", () => {
         this.commitCellEditor();
         this.commandManager.undo();
+
         this.limitScrollPosition();
         this.render();
         this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
 
-        this.statusBarService.updateForSelection(
-          this.selectionService.getSelection()
-        );
-
-        this.updateScrollBars();
+        this.updateSelectionDependentUi();
       });
     }
 
@@ -233,15 +252,12 @@ export class Grid {
       redoButton.addEventListener("click", () => {
         this.commitCellEditor();
         this.commandManager.redo();
+
         this.limitScrollPosition();
         this.render();
         this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
 
-        this.statusBarService.updateForSelection(
-          this.selectionService.getSelection()
-        );
-
-        this.updateScrollBars();
+        this.updateSelectionDependentUi();
       });
     }
   }
@@ -259,6 +275,8 @@ export class Grid {
   }
 
   private async handleGlobalKeyDown(event: KeyboardEvent): Promise<void> {
+    const target = event.target as HTMLElement | null;
+    const isFormulaBarFocused = target?.id === "formulaBar";
     const isUndo = event.ctrlKey && event.key.toLowerCase() === "z";
     const isRedo = event.ctrlKey && event.key.toLowerCase() === "y";
     const isCopy = event.ctrlKey && event.key.toLowerCase() === "c";
@@ -266,20 +284,21 @@ export class Grid {
     const isPaste = event.ctrlKey && event.key.toLowerCase() === "v";
     const isSelectAll = event.ctrlKey && event.key.toLowerCase() === "a";
 
+    if (isFormulaBarFocused) {
+      return;
+    }
+
     if (isUndo) {
       event.preventDefault();
 
       this.commitCellEditor();
       this.commandManager.undo();
+
       this.limitScrollPosition();
       this.render();
       this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
 
-      this.statusBarService.updateForSelection(
-        this.selectionService.getSelection()
-      );
-
-      this.updateScrollBars();
+      this.updateSelectionDependentUi();
       return;
     }
 
@@ -288,15 +307,12 @@ export class Grid {
 
       this.commitCellEditor();
       this.commandManager.redo();
+
       this.limitScrollPosition();
       this.render();
       this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
 
-      this.statusBarService.updateForSelection(
-        this.selectionService.getSelection()
-      );
-
-      this.updateScrollBars();
+      this.updateSelectionDependentUi();
       return;
     }
 
@@ -432,6 +448,7 @@ export class Grid {
       this.commitCellEditor();
       this.selectionService.clearSelection();
       this.statusBarService.reset();
+      this.formulaBarService.clear();
       this.render();
       this.updateScrollBars();
       return;
@@ -521,6 +538,10 @@ export class Grid {
       this.selectionService.getSelection()
     );
 
+    this.formulaBarService.updateForSelection(
+      this.selectionService.getSelection()
+    );
+
     this.render();
     this.updateScrollBars();
   }
@@ -593,11 +614,7 @@ export class Grid {
       cellPosition.columnIndex
     );
 
-    this.statusBarService.updateCell(
-      cellPosition.rowIndex,
-      cellPosition.columnIndex,
-      this.selectionService.getSelection()
-    );
+    this.updateSelectionDependentUi();
 
     this.render();
 
@@ -627,11 +644,7 @@ export class Grid {
       cellPosition.columnIndex
     );
 
-    this.statusBarService.updateCell(
-      cellPosition.rowIndex,
-      cellPosition.columnIndex,
-      this.selectionService.getSelection()
-    );
+    this.updateSelectionDependentUi();
 
     this.render();
     this.updateScrollBars();
@@ -674,12 +687,7 @@ export class Grid {
     this.scrollY = navigationResult.scrollY;
 
     this.limitScrollPosition();
-
-    this.statusBarService.updateCell(
-      navigationResult.rowIndex,
-      navigationResult.columnIndex,
-      this.selectionService.getSelection()
-    );
+    this.updateSelectionDependentUi();
 
     this.render();
     this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
@@ -707,6 +715,10 @@ export class Grid {
       this.selectionService.getSelection()
     );
 
+    this.formulaBarService.updateForSelection(
+      this.selectionService.getSelection()
+    );
+
     this.render();
     this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
     this.updateScrollBars();
@@ -723,12 +735,7 @@ export class Grid {
     this.scrollY = navigationResult.scrollY;
 
     this.limitScrollPosition();
-
-    this.statusBarService.updateCell(
-      navigationResult.rowIndex,
-      navigationResult.columnIndex,
-      this.selectionService.getSelection()
-    );
+    this.updateSelectionDependentUi();
 
     this.render();
 
@@ -756,13 +763,7 @@ export class Grid {
       usedRange.endColumn
     );
 
-    this.statusBarService.updateRange(
-      usedRange.startRow,
-      usedRange.startColumn,
-      usedRange.endRow,
-      usedRange.endColumn,
-      this.selectionService.getSelection()
-    );
+    this.updateSelectionDependentUi();
 
     this.render();
     this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
@@ -816,10 +817,7 @@ export class Grid {
     this.commandManager.execute(command);
     this.render();
 
-    this.statusBarService.updateForSelection(
-      this.selectionService.getSelection()
-    );
-
+    this.updateSelectionDependentUi();
     this.updateScrollBars();
   }
 
@@ -946,12 +944,6 @@ export class Grid {
 
     if (startRow === endRow && startColumn === endColumn) {
       this.selectionService.setCellSelection(startRow, startColumn);
-
-      this.statusBarService.updateCell(
-        startRow,
-        startColumn,
-        this.selectionService.getSelection()
-      );
     } else {
       this.selectionService.setRangeSelection(
         startRow,
@@ -959,19 +951,44 @@ export class Grid {
         endRow,
         endColumn
       );
-
-      this.statusBarService.updateRange(
-        startRow,
-        startColumn,
-        endRow,
-        endColumn,
-        this.selectionService.getSelection()
-      );
     }
+
+    this.updateSelectionDependentUi();
 
     this.render();
     this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
     this.updateScrollBars();
+  }
+
+  private saveFormulaBarValue(value: string): void {
+    const selection = this.selectionService.getSelection();
+
+    if (!selection) {
+      return;
+    }
+
+    const rowIndex = selection.startRow;
+    const columnIndex = selection.startColumn;
+
+    const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
+    const newValue = this.parseCellValue(value);
+
+    const isSameValue = String(oldValue ?? "") === String(newValue ?? "");
+
+    if (!isSameValue) {
+      const command = new EditCellCommand(
+        this.dataStore,
+        rowIndex,
+        columnIndex,
+        oldValue,
+        newValue
+      );
+
+      this.commandManager.execute(command);
+    }
+
+    this.render();
+    this.updateSelectionDependentUi();
   }
 
   private commitCellEditor(): void {
@@ -995,14 +1012,7 @@ export class Grid {
     const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
     const editorValue = this.cellEditorService.getValue().trim();
 
-    let newValue: CellValue;
-
-    if (editorValue === "") {
-      newValue = null;
-    } else {
-      const numericValue = Number(editorValue);
-      newValue = Number.isNaN(numericValue) ? editorValue : numericValue;
-    }
+    const newValue = this.parseCellValue(editorValue);
 
     const isSameValue = String(oldValue ?? "") === String(newValue ?? "");
 
@@ -1021,11 +1031,20 @@ export class Grid {
     this.cellEditorService.hide();
     this.render();
 
-    this.statusBarService.updateForSelection(
-      this.selectionService.getSelection()
-    );
-
+    this.updateSelectionDependentUi();
     this.updateScrollBars();
+  }
+
+  private parseCellValue(value: string): CellValue {
+    const trimmedValue = value.trim();
+
+    if (trimmedValue === "") {
+      return null;
+    }
+
+    const numericValue = Number(trimmedValue);
+
+    return Number.isNaN(numericValue) ? value : numericValue;
   }
 
   private handleEditorKeyDown(event: KeyboardEvent): void {
@@ -1059,10 +1078,7 @@ export class Grid {
     this.isSelectingRange = false;
     this.selectionService.setRowSelection(rowIndex);
 
-    this.statusBarService.updateRow(
-      rowIndex,
-      this.selectionService.getSelection()
-    );
+    this.updateSelectionDependentUi();
 
     this.render();
     this.updateScrollBars();
@@ -1078,13 +1094,17 @@ export class Grid {
     this.isSelectingRange = false;
     this.selectionService.setColumnSelection(columnIndex);
 
-    this.statusBarService.updateColumn(
-      columnIndex,
-      this.selectionService.getSelection()
-    );
+    this.updateSelectionDependentUi();
 
     this.render();
     this.updateScrollBars();
+  }
+
+  private updateSelectionDependentUi(): void {
+    const selection = this.selectionService.getSelection();
+
+    this.statusBarService.updateForSelection(selection);
+    this.formulaBarService.updateForSelection(selection);
   }
 
   private getTotalColumnsWidth(): number {

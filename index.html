@@ -17,23 +17,27 @@
         </div>
       </div>
 
+      <div class="formula-bar-container">
+        <input id="nameBox" class="name-box" readonly />
+        <input id="formulaBar" class="formula-bar" />
+      </div>
+
       <div class="grid-container">
         <canvas id="gridCanvas"></canvas>
         <textarea id="cellEditor" class="cell-editor"></textarea>
-      
+
         <div id="horizontalScrollbar" class="custom-scrollbar horizontal-scrollbar">
           <div id="horizontalScrollThumb" class="scrollbar-thumb horizontal-thumb"></div>
         </div>
-      
+        
         <div id="verticalScrollbar" class="custom-scrollbar vertical-scrollbar">
           <div id="verticalScrollThumb" class="scrollbar-thumb vertical-thumb"></div>
         </div>
-      
         <div class="scrollbar-corner"></div>
       </div>
 
       <div id="statusBar" class="status-bar">
-        Count: 0 | Sum: 0 | Avg: 0 | Min: - | Max: -
+        Count: 0 | Sum: 0 | Avg: - | Min: - | Max: -
       </div>
     </div>
 
