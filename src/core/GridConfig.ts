@@ -1,24 +1,36 @@
-export const GridConfig = {
-  totalRows: 100000,
-  totalColumns: 500,
+export class GridConfig {
+  static readonly totalRows = 100000;
+  static readonly totalColumns = 500;
 
-  defaultRowHeight: 24,
-  defaultColumnWidth: 100,
+  static readonly defaultRowHeight = 24;
+  static readonly defaultColumnWidth = 120;
 
-  rowHeaderWidth: 50,
-  columnHeaderHeight: 28,
+  static readonly minRowHeight = 18;
+  static readonly minColumnWidth = 40;
 
-  minRowHeight: 18,
-  minColumnWidth: 40,
+  static readonly rowHeaderWidth = 48;
+  static readonly columnHeaderHeight = 28;
 
-  gridLineColor: "#d0d7de",
-  headerBackgroundColor: "#f3f3f3",
-  headerTextColor: "#333333",
-  cellTextColor: "#222222",
+  static readonly font = "12px Arial, Helvetica, sans-serif";
+  static readonly headerFont = "600 12px Arial, Helvetica, sans-serif";
 
-  selectedCellBorderColor: "#217346",
-  selectedCellFillColor: "rgba(33, 115, 70, 0.12)",
+  static readonly backgroundColor = "#ffffff";
 
-  font: "12px Arial",
-  headerFont: "600 12px Arial"
-};
+  static readonly gridLineColor = "#e0e0e0";
+  static readonly headerBackgroundColor = "#f3f4f6";
+  static readonly headerTextColor = "#333333";
+
+  static readonly cellTextColor = "#222222";
+
+  static readonly selectedCellFillColor = "rgba(33, 115, 70, 0.12)";
+  static readonly selectedCellBorderColor = "#217346";
+
+  static readonly selectedHeaderBackgroundColor = "#dff0e7";
+  static readonly selectedHeaderTextColor = "#145c38";
+
+  static readonly activeCellBorderColor = "#217346";
+  static readonly activeCellBorderWidth = 2;
+
+  static readonly rangeBorderColor = "#217346";
+  static readonly rangeBorderWidth = 2;
+}
