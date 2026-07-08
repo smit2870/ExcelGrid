@@ -2,6 +2,11 @@ import type { CellValue, GridDataStore } from "../core/GridDataStore";
 import type { Selection } from "../models/Selection";
 import { CanvasUtils } from "../utils/CanvasUtils";
 
+interface FormulaBarCallbacks {
+  onFormulaCommit(value: string): void;
+  onNameBoxCommit(value: string): void;
+}
+
 export class FormulaBarService {
   private nameBox: HTMLInputElement | null;
   private formulaBar: HTMLTextAreaElement | null;
@@ -17,33 +22,50 @@ export class FormulaBarService {
     this.dataStore = dataStore;
   }
 
-  attach(onCommit: (value: string) => void): void {
-    if (!this.formulaBar) {
-      return;
+  attach(callbacks: FormulaBarCallbacks): void {
+    if (this.formulaBar) {
+      this.formulaBar.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Enter" && event.altKey) {
+          event.preventDefault();
+          this.insertNewLineAtCursor();
+          return;
+        }
+
+        if (event.key === "Enter") {
+          event.preventDefault();
+
+          const value = this.formulaBar?.value ?? "";
+          callbacks.onFormulaCommit(value);
+
+          this.formulaBar?.blur();
+          return;
+        }
+
+        if (event.key === "Escape") {
+          event.preventDefault();
+          this.formulaBar?.blur();
+        }
+      });
     }
 
-    this.formulaBar.addEventListener("keydown", (event: KeyboardEvent) => {
-      if (event.key === "Enter" && event.altKey) {
-        event.preventDefault();
-        this.insertNewLineAtCursor();
-        return;
-      }
+    if (this.nameBox) {
+      this.nameBox.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
 
-      if (event.key === "Enter") {
-        event.preventDefault();
+          const value = this.nameBox?.value ?? "";
+          callbacks.onNameBoxCommit(value);
 
-        const value = this.formulaBar?.value ?? "";
-        onCommit(value);
+          this.nameBox?.blur();
+          return;
+        }
 
-        this.formulaBar?.blur();
-        return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        this.formulaBar?.blur();
-      }
-    });
+        if (event.key === "Escape") {
+          event.preventDefault();
+          this.nameBox?.blur();
+        }
+      });
+    }
   }
 
   updateForSelection(selection: Selection | null): void {

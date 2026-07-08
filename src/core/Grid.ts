@@ -233,8 +233,13 @@ export class Grid {
     this.keyboardHandler.attach();
     this.scrollBarService.attach();
 
-    this.formulaBarService.attach((value: string) => {
-      this.saveFormulaBarValue(value);
+    this.formulaBarService.attach({
+      onFormulaCommit: (value: string) => {
+        this.saveFormulaBarValue(value);
+      },
+      onNameBoxCommit: (value: string) => {
+        this.navigateFromNameBox(value);
+      }
     });
 
     const undoButton = document.getElementById("undoBtn");
@@ -284,6 +289,7 @@ export class Grid {
   private async handleGlobalKeyDown(event: KeyboardEvent): Promise<void> {
     const target = event.target as HTMLElement | null;
     const isFormulaBarFocused = target?.id === "formulaBar";
+    const isNameBoxFocused = target?.id === "nameBox";
 
     const isUndo = event.ctrlKey && event.key.toLowerCase() === "z";
     const isRedo = event.ctrlKey && event.key.toLowerCase() === "y";
@@ -292,7 +298,7 @@ export class Grid {
     const isPaste = event.ctrlKey && event.key.toLowerCase() === "v";
     const isSelectAll = event.ctrlKey && event.key.toLowerCase() === "a";
 
-    if (isFormulaBarFocused) {
+    if (isFormulaBarFocused || isNameBoxFocused) {
       return;
     }
 
@@ -990,6 +996,161 @@ export class Grid {
 
     this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
     this.updateScrollBars();
+  }
+
+  private navigateFromNameBox(value: string): void {
+    const parsedReference = this.parseNameBoxReference(value);
+
+    if (!parsedReference) {
+      this.formulaBarService.updateForSelection(
+        this.selectionService.getSelection()
+      );
+      return;
+    }
+
+    if (parsedReference.type === "cell") {
+      this.selectionService.setCellSelection(
+        parsedReference.startRow,
+        parsedReference.startColumn
+      );
+
+      this.scrollToCell(parsedReference.startRow, parsedReference.startColumn);
+    }
+
+    if (parsedReference.type === "range") {
+      this.selectionService.setRangeSelection(
+        parsedReference.startRow,
+        parsedReference.startColumn,
+        parsedReference.endRow,
+        parsedReference.endColumn
+      );
+
+      this.scrollToCell(parsedReference.startRow, parsedReference.startColumn);
+    }
+
+    this.updateSelectionDependentUi();
+
+    this.render();
+    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+    this.updateScrollBars();
+  }
+
+  private parseNameBoxReference(
+    value: string
+  ):
+    | {
+        type: "cell";
+        startRow: number;
+        startColumn: number;
+        endRow: number;
+        endColumn: number;
+      }
+    | {
+        type: "range";
+        startRow: number;
+        startColumn: number;
+        endRow: number;
+        endColumn: number;
+      }
+    | null {
+    const normalizedValue = value.trim().toUpperCase();
+
+    if (normalizedValue === "") {
+      return null;
+    }
+
+    const parts = normalizedValue.split(":");
+
+    if (parts.length === 1) {
+      const cell = this.parseCellReference(parts[0] ?? "");
+
+      if (!cell) {
+        return null;
+      }
+
+      return {
+        type: "cell",
+        startRow: cell.rowIndex,
+        startColumn: cell.columnIndex,
+        endRow: cell.rowIndex,
+        endColumn: cell.columnIndex
+      };
+    }
+
+    if (parts.length === 2) {
+      const startCell = this.parseCellReference(parts[0] ?? "");
+      const endCell = this.parseCellReference(parts[1] ?? "");
+
+      if (!startCell || !endCell) {
+        return null;
+      }
+
+      return {
+        type: "range",
+        startRow: startCell.rowIndex,
+        startColumn: startCell.columnIndex,
+        endRow: endCell.rowIndex,
+        endColumn: endCell.columnIndex
+      };
+    }
+
+    return null;
+  }
+
+  private parseCellReference(
+    value: string
+  ): { rowIndex: number; columnIndex: number } | null {
+    const match = value.match(/^([A-Z]+)([1-9][0-9]*)$/);
+
+    if (!match) {
+      return null;
+    }
+
+    const columnName = match[1] ?? "";
+    const rowNumber = Number(match[2] ?? "0");
+
+    const columnIndex = this.getColumnIndexFromName(columnName);
+    const rowIndex = rowNumber - 1;
+
+    const isValidCell =
+      rowIndex >= 0 &&
+      rowIndex < GridConfig.totalRows &&
+      columnIndex >= 0 &&
+      columnIndex < GridConfig.totalColumns;
+
+    if (!isValidCell) {
+      return null;
+    }
+
+    return {
+      rowIndex,
+      columnIndex
+    };
+  }
+
+  private getColumnIndexFromName(columnName: string): number {
+    let columnIndex = 0;
+
+    for (let index = 0; index < columnName.length; index++) {
+      const characterCode = columnName.charCodeAt(index) - 64;
+      columnIndex = columnIndex * 26 + characterCode;
+    }
+
+    return columnIndex - 1;
+  }
+
+  private scrollToCell(rowIndex: number, columnIndex: number): void {
+    const updatedScroll = this.keyboardNavigationService.ensureCellVisible(
+      rowIndex,
+      columnIndex,
+      this.scrollX,
+      this.scrollY
+    );
+
+    this.scrollX = updatedScroll.scrollX;
+    this.scrollY = updatedScroll.scrollY;
+
+    this.limitScrollPosition();
   }
 
   private commitCellEditor(): void {
