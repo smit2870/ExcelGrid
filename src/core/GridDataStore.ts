@@ -87,4 +87,34 @@ export class GridDataStore {
       callback(rowIndex, columnIndex, value);
     });
   }
+
+  getUsedRange(): {
+    startRow: number;
+    endRow: number;
+    startColumn: number;
+    endColumn: number;
+  } | null {
+    if (this.cells.size === 0) {
+      return null;
+    }
+
+    let startRow = Number.POSITIVE_INFINITY;
+    let endRow = Number.NEGATIVE_INFINITY;
+    let startColumn = Number.POSITIVE_INFINITY;
+    let endColumn = Number.NEGATIVE_INFINITY;
+
+    this.forEachCell((rowIndex, columnIndex) => {
+      startRow = Math.min(startRow, rowIndex);
+      endRow = Math.max(endRow, rowIndex);
+      startColumn = Math.min(startColumn, columnIndex);
+      endColumn = Math.max(endColumn, columnIndex);
+    });
+
+    return {
+      startRow,
+      endRow,
+      startColumn,
+      endColumn
+    };
+  }
 }

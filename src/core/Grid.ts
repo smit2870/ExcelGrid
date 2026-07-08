@@ -264,6 +264,7 @@ export class Grid {
     const isCopy = event.ctrlKey && event.key.toLowerCase() === "c";
     const isCut = event.ctrlKey && event.key.toLowerCase() === "x";
     const isPaste = event.ctrlKey && event.key.toLowerCase() === "v";
+    const isSelectAll = event.ctrlKey && event.key.toLowerCase() === "a";
 
     if (isUndo) {
       event.preventDefault();
@@ -300,6 +301,12 @@ export class Grid {
     }
 
     if (this.cellEditorService.isEditing()) {
+      return;
+    }
+
+    if (isSelectAll) {
+      event.preventDefault();
+      this.selectAllData();
       return;
     }
 
@@ -735,6 +742,33 @@ export class Grid {
     this.updateScrollBars();
   }
 
+  private selectAllData(): void {
+    const usedRange = this.dataStore.getUsedRange();
+
+    if (!usedRange) {
+      return;
+    }
+
+    this.selectionService.setRangeSelection(
+      usedRange.startRow,
+      usedRange.startColumn,
+      usedRange.endRow,
+      usedRange.endColumn
+    );
+
+    this.statusBarService.updateRange(
+      usedRange.startRow,
+      usedRange.startColumn,
+      usedRange.endRow,
+      usedRange.endColumn,
+      this.selectionService.getSelection()
+    );
+
+    this.render();
+    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+    this.updateScrollBars();
+  }
+
   private clearSelectedCells(): void {
     const selection = this.selectionService.getSelection();
 
@@ -1065,15 +1099,15 @@ export class Grid {
     const maxScrollX = Math.max(
       0,
       this.getTotalColumnsWidth() -
-      this.canvas.clientWidth +
-      GridConfig.rowHeaderWidth
+        this.canvas.clientWidth +
+        GridConfig.rowHeaderWidth
     );
 
     const maxScrollY = Math.max(
       0,
       this.getTotalRowsHeight() -
-      this.canvas.clientHeight +
-      GridConfig.columnHeaderHeight
+        this.canvas.clientHeight +
+        GridConfig.columnHeaderHeight
     );
 
     this.scrollX = Math.max(0, Math.min(this.scrollX, maxScrollX));
@@ -1084,15 +1118,15 @@ export class Grid {
     const maxScrollX = Math.max(
       0,
       this.getTotalColumnsWidth() -
-      this.canvas.clientWidth +
-      GridConfig.rowHeaderWidth
+        this.canvas.clientWidth +
+        GridConfig.rowHeaderWidth
     );
 
     const maxScrollY = Math.max(
       0,
       this.getTotalRowsHeight() -
-      this.canvas.clientHeight +
-      GridConfig.columnHeaderHeight
+        this.canvas.clientHeight +
+        GridConfig.columnHeaderHeight
     );
 
     this.scrollBarService.update({
