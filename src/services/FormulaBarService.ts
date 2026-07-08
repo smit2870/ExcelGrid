@@ -4,12 +4,12 @@ import { CanvasUtils } from "../utils/CanvasUtils";
 
 export class FormulaBarService {
   private nameBox: HTMLInputElement | null;
-  private formulaBar: HTMLInputElement | null;
+  private formulaBar: HTMLTextAreaElement | null;
   private dataStore: GridDataStore;
 
   constructor(
     nameBox: HTMLInputElement | null,
-    formulaBar: HTMLInputElement | null,
+    formulaBar: HTMLTextAreaElement | null,
     dataStore: GridDataStore
   ) {
     this.nameBox = nameBox;
@@ -23,9 +23,19 @@ export class FormulaBarService {
     }
 
     this.formulaBar.addEventListener("keydown", (event: KeyboardEvent) => {
+      if (event.key === "Enter" && event.altKey) {
+        event.preventDefault();
+        this.insertNewLineAtCursor();
+        return;
+      }
+
       if (event.key === "Enter") {
         event.preventDefault();
-        onCommit(this.formulaBar?.value ?? "");
+
+        const value = this.formulaBar?.value ?? "";
+        onCommit(value);
+
+        this.formulaBar?.blur();
         return;
       }
 
@@ -122,6 +132,24 @@ export class FormulaBarService {
     const value = this.dataStore.getCellValue(rowIndex, columnIndex);
 
     this.formulaBar.value = value === null ? "" : String(value);
+  }
+
+  private insertNewLineAtCursor(): void {
+    if (!this.formulaBar) {
+      return;
+    }
+
+    const selectionStart = this.formulaBar.selectionStart;
+    const selectionEnd = this.formulaBar.selectionEnd;
+    const currentValue = this.formulaBar.value;
+
+    this.formulaBar.value =
+      currentValue.substring(0, selectionStart) +
+      "\n" +
+      currentValue.substring(selectionEnd);
+
+    const newCursorPosition = selectionStart + 1;
+    this.formulaBar.setSelectionRange(newCursorPosition, newCursorPosition);
   }
 
   private getCellName(rowIndex: number, columnIndex: number): string {

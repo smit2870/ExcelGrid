@@ -50,7 +50,7 @@ export class Grid {
   private statusBar: HTMLElement | null;
   private cellEditor: HTMLTextAreaElement | null;
   private nameBox: HTMLInputElement | null;
-  private formulaBar: HTMLInputElement | null;
+  private formulaBar: HTMLTextAreaElement | null;
 
   private scrollX: number;
   private scrollY: number;
@@ -77,7 +77,7 @@ export class Grid {
     this.nameBox = document.getElementById("nameBox") as HTMLInputElement | null;
     this.formulaBar = document.getElementById(
       "formulaBar"
-    ) as HTMLInputElement | null;
+    ) as HTMLTextAreaElement | null;
 
     this.dataStore = new GridDataStore(
       GridConfig.defaultRowHeight,
@@ -987,8 +987,20 @@ export class Grid {
       this.commandManager.execute(command);
     }
 
+    this.selectionService.setCellSelection(rowIndex, columnIndex);
+
     this.render();
-    this.updateSelectionDependentUi();
+
+    this.statusBarService.updateForSelection(
+      this.selectionService.getSelection()
+    );
+
+    this.formulaBarService.updateForSelection(
+      this.selectionService.getSelection()
+    );
+
+    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+    this.updateScrollBars();
   }
 
   private commitCellEditor(): void {
@@ -1119,15 +1131,15 @@ export class Grid {
     const maxScrollX = Math.max(
       0,
       this.getTotalColumnsWidth() -
-        this.canvas.clientWidth +
-        GridConfig.rowHeaderWidth
+      this.canvas.clientWidth +
+      GridConfig.rowHeaderWidth
     );
 
     const maxScrollY = Math.max(
       0,
       this.getTotalRowsHeight() -
-        this.canvas.clientHeight +
-        GridConfig.columnHeaderHeight
+      this.canvas.clientHeight +
+      GridConfig.columnHeaderHeight
     );
 
     this.scrollX = Math.max(0, Math.min(this.scrollX, maxScrollX));
@@ -1138,15 +1150,15 @@ export class Grid {
     const maxScrollX = Math.max(
       0,
       this.getTotalColumnsWidth() -
-        this.canvas.clientWidth +
-        GridConfig.rowHeaderWidth
+      this.canvas.clientWidth +
+      GridConfig.rowHeaderWidth
     );
 
     const maxScrollY = Math.max(
       0,
       this.getTotalRowsHeight() -
-        this.canvas.clientHeight +
-        GridConfig.columnHeaderHeight
+      this.canvas.clientHeight +
+      GridConfig.columnHeaderHeight
     );
 
     this.scrollBarService.update({
