@@ -154,8 +154,10 @@ export class Grid {
 
     this.selectionManager = new SelectionManager(
       this.canvas,
+      this.dataStore,
       this.selectionService,
       this.coordinateService,
+      this.keyboardNavigationService,
       {
         getScrollPosition: () => {
           return {
@@ -184,6 +186,9 @@ export class Grid {
         },
         flushSelectionDependentUiUpdate: () => {
           this.flushSelectionDependentUiUpdate();
+        },
+        updateCellEditorPosition: () => {
+          this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
         }
       }
     );
@@ -280,7 +285,7 @@ export class Grid {
       this.undoRedoManager,
       {
         selectAllData: () => {
-          this.selectAllData();
+          this.selectionManager.selectAllData();
         },
         clearSelectedCells: () => {
           this.clearSelectedCells();
@@ -407,7 +412,7 @@ export class Grid {
         this.cellEditingManager.saveFormulaBarValue(value);
       },
       onNameBoxCommit: (value: string) => {
-        this.navigateFromNameBox(value);
+        this.selectionManager.navigateFromNameBox(value);
       }
     });
 
@@ -522,7 +527,7 @@ export class Grid {
 
     if (isColumnHeaderClick) {
       this.commitCellEditor();
-      this.handleColumnHeaderClick(mouseX);
+      this.selectionManager.selectColumnFromHeader(mouseX);
       return;
     }
 
@@ -532,7 +537,7 @@ export class Grid {
 
     if (isRowHeaderClick) {
       this.commitCellEditor();
-      this.handleRowHeaderClick(mouseY);
+      this.selectionManager.selectRowFromHeader(mouseY);
       return;
     }
 
@@ -733,27 +738,6 @@ export class Grid {
     this.scheduleSelectionDependentUiUpdate();
   }
 
-  private selectAllData(): void {
-    const usedRange = this.dataStore.getUsedRange();
-
-    if (!usedRange) {
-      return;
-    }
-
-    this.selectionService.setRangeSelection(
-      usedRange.startRow,
-      usedRange.startColumn,
-      usedRange.endRow,
-      usedRange.endColumn
-    );
-
-    this.updateSelectionDependentUi();
-
-    this.render();
-    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-    this.updateScrollBars();
-  }
-
   private clearSelectedCells(): void {
     const selection = this.selectionService.getSelection();
 
@@ -807,201 +791,12 @@ export class Grid {
     this.updateScrollBars();
   }
 
-  private navigateFromNameBox(value: string): void {
-    const parsedReference = this.parseNameBoxReference(value);
-
-    if (!parsedReference) {
-      this.formulaBarService.updateForSelection(
-        this.selectionService.getSelection()
-      );
-      return;
-    }
-
-    if (parsedReference.type === "cell") {
-      this.selectionService.setCellSelection(
-        parsedReference.startRow,
-        parsedReference.startColumn
-      );
-
-      this.scrollToCell(parsedReference.startRow, parsedReference.startColumn);
-    }
-
-    if (parsedReference.type === "range") {
-      this.selectionService.setRangeSelection(
-        parsedReference.startRow,
-        parsedReference.startColumn,
-        parsedReference.endRow,
-        parsedReference.endColumn
-      );
-
-      this.scrollToCell(parsedReference.startRow, parsedReference.startColumn);
-    }
-
-    this.updateSelectionDependentUi();
-
-    this.render();
-    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-    this.updateScrollBars();
-  }
-
-  private parseNameBoxReference(
-    value: string
-  ):
-    | {
-        type: "cell";
-        startRow: number;
-        startColumn: number;
-        endRow: number;
-        endColumn: number;
-      }
-    | {
-        type: "range";
-        startRow: number;
-        startColumn: number;
-        endRow: number;
-        endColumn: number;
-      }
-    | null {
-    const normalizedValue = value.trim().toUpperCase();
-
-    if (normalizedValue === "") {
-      return null;
-    }
-
-    const parts = normalizedValue.split(":");
-
-    if (parts.length === 1) {
-      const cell = this.parseCellReference(parts[0] ?? "");
-
-      if (!cell) {
-        return null;
-      }
-
-      return {
-        type: "cell",
-        startRow: cell.rowIndex,
-        startColumn: cell.columnIndex,
-        endRow: cell.rowIndex,
-        endColumn: cell.columnIndex
-      };
-    }
-
-    if (parts.length === 2) {
-      const startCell = this.parseCellReference(parts[0] ?? "");
-      const endCell = this.parseCellReference(parts[1] ?? "");
-
-      if (!startCell || !endCell) {
-        return null;
-      }
-
-      return {
-        type: "range",
-        startRow: startCell.rowIndex,
-        startColumn: startCell.columnIndex,
-        endRow: endCell.rowIndex,
-        endColumn: endCell.columnIndex
-      };
-    }
-
-    return null;
-  }
-
-  private parseCellReference(
-    value: string
-  ): { rowIndex: number; columnIndex: number } | null {
-    const match = value.match(/^([A-Z]+)([1-9][0-9]*)$/);
-
-    if (!match) {
-      return null;
-    }
-
-    const columnName = match[1] ?? "";
-    const rowNumber = Number(match[2] ?? "0");
-
-    const columnIndex = this.getColumnIndexFromName(columnName);
-    const rowIndex = rowNumber - 1;
-
-    const isValidCell =
-      rowIndex >= 0 &&
-      rowIndex < GridConfig.totalRows &&
-      columnIndex >= 0 &&
-      columnIndex < GridConfig.totalColumns;
-
-    if (!isValidCell) {
-      return null;
-    }
-
-    return {
-      rowIndex,
-      columnIndex
-    };
-  }
-
-  private getColumnIndexFromName(columnName: string): number {
-    let columnIndex = 0;
-
-    for (let index = 0; index < columnName.length; index++) {
-      const characterCode = columnName.charCodeAt(index) - 64;
-      columnIndex = columnIndex * 26 + characterCode;
-    }
-
-    return columnIndex - 1;
-  }
-
-  private scrollToCell(rowIndex: number, columnIndex: number): void {
-    const updatedScroll = this.keyboardNavigationService.ensureCellVisible(
-      rowIndex,
-      columnIndex,
-      this.scrollX,
-      this.scrollY
-    );
-
-    this.scrollX = updatedScroll.scrollX;
-    this.scrollY = updatedScroll.scrollY;
-
-    this.limitScrollPosition();
-  }
-
   private commitCellEditor(): void {
     this.cellEditingManager.commitCellEditor();
   }
 
   private handleEditorKeyDown(event: KeyboardEvent): void {
     this.cellEditingManager.handleEditorKeyDown(event);
-  }
-
-  private handleRowHeaderClick(mouseY: number): void {
-    const rowIndex = this.getRowIndexFromMouseY(mouseY);
-
-    if (rowIndex === null) {
-      return;
-    }
-
-    this.selectionManager.cancelSelection();
-
-    this.selectionService.setRowSelection(rowIndex);
-
-    this.updateSelectionDependentUi();
-
-    this.render();
-    this.updateScrollBars();
-  }
-
-  private handleColumnHeaderClick(mouseX: number): void {
-    const columnIndex = this.getColumnIndexFromMouseX(mouseX);
-
-    if (columnIndex === null) {
-      return;
-    }
-
-    this.selectionManager.cancelSelection();
-
-    this.selectionService.setColumnSelection(columnIndex);
-
-    this.updateSelectionDependentUi();
-
-    this.render();
-    this.updateScrollBars();
   }
 
   private scheduleSelectionDependentUiUpdate(): void {

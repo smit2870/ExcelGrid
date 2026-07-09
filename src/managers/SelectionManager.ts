@@ -1,6 +1,8 @@
 import { GridConfig } from "../core/GridConfig";
+import type { GridDataStore } from "../core/GridDataStore";
 import type { CoordinateService } from "../services/CoordinateService";
 import type { SelectionService } from "../services/SelectionService";
+import type { KeyboardNavigationService } from "../services/KeyboardNavigationService";
 
 interface ScrollPosition {
   scrollX: number;
@@ -16,12 +18,15 @@ interface SelectionManagerCallbacks {
   updateSelectionDependentUi(): void;
   scheduleSelectionDependentUiUpdate(): void;
   flushSelectionDependentUiUpdate(): void;
+  updateCellEditorPosition(): void;
 }
 
 export class SelectionManager {
   private canvas: HTMLCanvasElement;
+  private dataStore: GridDataStore;
   private selectionService: SelectionService;
   private coordinateService: CoordinateService;
+  private keyboardNavigationService: KeyboardNavigationService;
   private callbacks: SelectionManagerCallbacks;
 
   private isSelectingRange: boolean;
@@ -34,13 +39,17 @@ export class SelectionManager {
 
   constructor(
     canvas: HTMLCanvasElement,
+    dataStore: GridDataStore,
     selectionService: SelectionService,
     coordinateService: CoordinateService,
+    keyboardNavigationService: KeyboardNavigationService,
     callbacks: SelectionManagerCallbacks
   ) {
     this.canvas = canvas;
+    this.dataStore = dataStore;
     this.selectionService = selectionService;
     this.coordinateService = coordinateService;
+    this.keyboardNavigationService = keyboardNavigationService;
     this.callbacks = callbacks;
 
     this.isSelectingRange = false;
@@ -118,6 +127,96 @@ export class SelectionManager {
     this.stopSelectionAutoScroll();
   }
 
+  selectAllData(): void {
+    const usedRange = this.dataStore.getUsedRange();
+
+    if (!usedRange) {
+      return;
+    }
+
+    this.selectionService.setRangeSelection(
+      usedRange.startRow,
+      usedRange.startColumn,
+      usedRange.endRow,
+      usedRange.endColumn
+    );
+
+    this.callbacks.updateSelectionDependentUi();
+
+    this.callbacks.render();
+    this.callbacks.updateCellEditorPosition();
+    this.callbacks.updateScrollBars();
+  }
+
+  selectRowFromHeader(mouseY: number): void {
+    const rowIndex = this.getRowIndexFromMouseY(mouseY);
+
+    if (rowIndex === null) {
+      return;
+    }
+
+    this.cancelSelection();
+
+    this.selectionService.setRowSelection(rowIndex);
+
+    this.callbacks.updateSelectionDependentUi();
+
+    this.callbacks.render();
+    this.callbacks.updateScrollBars();
+  }
+
+  selectColumnFromHeader(mouseX: number): void {
+    const columnIndex = this.getColumnIndexFromMouseX(mouseX);
+
+    if (columnIndex === null) {
+      return;
+    }
+
+    this.cancelSelection();
+
+    this.selectionService.setColumnSelection(columnIndex);
+
+    this.callbacks.updateSelectionDependentUi();
+
+    this.callbacks.render();
+    this.callbacks.updateScrollBars();
+  }
+
+  navigateFromNameBox(value: string): void {
+    const parsedReference = this.parseNameBoxReference(value);
+
+    if (!parsedReference) {
+      this.callbacks.updateSelectionDependentUi();
+      return;
+    }
+
+    if (parsedReference.type === "cell") {
+      this.selectionService.setCellSelection(
+        parsedReference.startRow,
+        parsedReference.startColumn
+      );
+
+      this.scrollToCell(parsedReference.startRow, parsedReference.startColumn);
+    }
+
+    if (parsedReference.type === "range") {
+      this.selectionService.setRangeSelection(
+        parsedReference.startRow,
+        parsedReference.startColumn,
+        parsedReference.endRow,
+        parsedReference.endColumn
+      );
+
+      this.scrollToCell(parsedReference.startRow, parsedReference.startColumn);
+    }
+
+    this.callbacks.updateSelectionDependentUi();
+
+    this.callbacks.render();
+    this.callbacks.updateCellEditorPosition();
+    this.callbacks.updateScrollBars();
+  }
+
   private getCellPositionFromMouse(
     mouseX: number,
     mouseY: number
@@ -130,17 +229,8 @@ export class SelectionManager {
       return null;
     }
 
-    const { scrollX, scrollY } = this.callbacks.getScrollPosition();
-
-    const columnIndex = this.coordinateService.getColumnIndexFromMouseX(
-      mouseX,
-      scrollX
-    );
-
-    const rowIndex = this.coordinateService.getRowIndexFromMouseY(
-      mouseY,
-      scrollY
-    );
+    const columnIndex = this.getColumnIndexFromMouseX(mouseX);
+    const rowIndex = this.getRowIndexFromMouseY(mouseY);
 
     if (columnIndex === null || rowIndex === null) {
       return null;
@@ -296,5 +386,139 @@ export class SelectionManager {
     const normalizedDistance = Math.min(distance / threshold, 1);
 
     return Math.ceil(normalizedDistance * maxSpeed);
+  }
+
+  private getColumnIndexFromMouseX(mouseX: number): number | null {
+    const { scrollX } = this.callbacks.getScrollPosition();
+
+    return this.coordinateService.getColumnIndexFromMouseX(mouseX, scrollX);
+  }
+
+  private getRowIndexFromMouseY(mouseY: number): number | null {
+    const { scrollY } = this.callbacks.getScrollPosition();
+
+    return this.coordinateService.getRowIndexFromMouseY(mouseY, scrollY);
+  }
+
+  private parseNameBoxReference(
+    value: string
+  ):
+    | {
+        type: "cell";
+        startRow: number;
+        startColumn: number;
+        endRow: number;
+        endColumn: number;
+      }
+    | {
+        type: "range";
+        startRow: number;
+        startColumn: number;
+        endRow: number;
+        endColumn: number;
+      }
+    | null {
+    const normalizedValue = value.trim().toUpperCase();
+
+    if (normalizedValue === "") {
+      return null;
+    }
+
+    const parts = normalizedValue.split(":");
+
+    if (parts.length === 1) {
+      const cell = this.parseCellReference(parts[0] ?? "");
+
+      if (!cell) {
+        return null;
+      }
+
+      return {
+        type: "cell",
+        startRow: cell.rowIndex,
+        startColumn: cell.columnIndex,
+        endRow: cell.rowIndex,
+        endColumn: cell.columnIndex
+      };
+    }
+
+    if (parts.length === 2) {
+      const startCell = this.parseCellReference(parts[0] ?? "");
+      const endCell = this.parseCellReference(parts[1] ?? "");
+
+      if (!startCell || !endCell) {
+        return null;
+      }
+
+      return {
+        type: "range",
+        startRow: startCell.rowIndex,
+        startColumn: startCell.columnIndex,
+        endRow: endCell.rowIndex,
+        endColumn: endCell.columnIndex
+      };
+    }
+
+    return null;
+  }
+
+  private parseCellReference(
+    value: string
+  ): { rowIndex: number; columnIndex: number } | null {
+    const match = value.match(/^([A-Z]+)([1-9][0-9]*)$/);
+
+    if (!match) {
+      return null;
+    }
+
+    const columnName = match[1] ?? "";
+    const rowNumber = Number(match[2] ?? "0");
+
+    const columnIndex = this.getColumnIndexFromName(columnName);
+    const rowIndex = rowNumber - 1;
+
+    const isValidCell =
+      rowIndex >= 0 &&
+      rowIndex < GridConfig.totalRows &&
+      columnIndex >= 0 &&
+      columnIndex < GridConfig.totalColumns;
+
+    if (!isValidCell) {
+      return null;
+    }
+
+    return {
+      rowIndex,
+      columnIndex
+    };
+  }
+
+  private getColumnIndexFromName(columnName: string): number {
+    let columnIndex = 0;
+
+    for (let index = 0; index < columnName.length; index++) {
+      const characterCode = columnName.charCodeAt(index) - 64;
+      columnIndex = columnIndex * 26 + characterCode;
+    }
+
+    return columnIndex - 1;
+  }
+
+  private scrollToCell(rowIndex: number, columnIndex: number): void {
+    const currentScroll = this.callbacks.getScrollPosition();
+
+    const updatedScroll = this.keyboardNavigationService.ensureCellVisible(
+      rowIndex,
+      columnIndex,
+      currentScroll.scrollX,
+      currentScroll.scrollY
+    );
+
+    this.callbacks.setScrollPosition(
+      updatedScroll.scrollX,
+      updatedScroll.scrollY
+    );
+
+    this.callbacks.limitScrollPosition();
   }
 }
