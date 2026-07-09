@@ -15,11 +15,11 @@ import { FormulaBarService } from "../services/FormulaBarService";
 import { SelectionManager } from "../managers/SelectionManager";
 import { ClipboardManager } from "../managers/ClipboardManager";
 import { PersistenceManager } from "../managers/PersistenceManager";
+import { CellEditingManager } from "../managers/CellEditingManager";
 
 import { CanvasUtils } from "../utils/CanvasUtils";
 
 import { CommandManager } from "../commands/CommandManager";
-import { EditCellCommand } from "../commands/EditCellCommand";
 import { ClearCellsCommand } from "../commands/ClearCellsCommand";
 
 import { MouseHandler } from "../events/MouseHandler";
@@ -45,6 +45,7 @@ export class Grid {
   private selectionManager: SelectionManager;
   private clipboardManager: ClipboardManager;
   private persistenceManager: PersistenceManager;
+  private cellEditingManager: CellEditingManager;
 
   private mouseHandler: MouseHandler;
   private keyboardHandler: KeyboardHandler;
@@ -206,6 +207,44 @@ export class Grid {
       }
     );
 
+    this.cellEditingManager = new CellEditingManager(
+      this.dataStore,
+      this.selectionService,
+      this.commandManager,
+      this.cellEditorService,
+      this.keyboardNavigationService,
+      {
+        getScrollPosition: () => {
+          return {
+            scrollX: this.scrollX,
+            scrollY: this.scrollY
+          };
+        },
+        setScrollPosition: (scrollX: number, scrollY: number) => {
+          this.scrollX = scrollX;
+          this.scrollY = scrollY;
+        },
+        limitScrollPosition: () => {
+          this.limitScrollPosition();
+        },
+        render: () => {
+          this.render();
+        },
+        updateSelectionDependentUi: () => {
+          this.updateSelectionDependentUi();
+        },
+        updateScrollBars: () => {
+          this.updateScrollBars();
+        },
+        updateCellEditorPosition: () => {
+          this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+        },
+        savePersistedState: () => {
+          void this.persistenceManager.savePersistedState();
+        }
+      }
+    );
+
     this.scrollBarService = new ScrollBarService(
       {
         horizontalTrack: document.getElementById("horizontalScrollbar"),
@@ -316,7 +355,7 @@ export class Grid {
 
     this.formulaBarService.attach({
       onFormulaCommit: (value: string) => {
-        this.saveFormulaBarValue(value);
+        this.cellEditingManager.saveFormulaBarValue(value);
       },
       onNameBoxCommit: (value: string) => {
         this.navigateFromNameBox(value);
@@ -548,7 +587,7 @@ export class Grid {
 
     if (event.key === "Enter") {
       event.preventDefault();
-      this.startEditingSelectedCell();
+      this.cellEditingManager.startEditingSelectedCell();
     }
   }
 
@@ -807,31 +846,6 @@ export class Grid {
     this.scheduleSelectionDependentUiUpdate();
   }
 
-  private startEditingSelectedCell(): void {
-    const navigationResult =
-      this.keyboardNavigationService.prepareSelectedCellForEditing(
-        this.scrollX,
-        this.scrollY
-      );
-
-    this.scrollX = navigationResult.scrollX;
-    this.scrollY = navigationResult.scrollY;
-
-    this.limitScrollPosition();
-    this.updateSelectionDependentUi();
-
-    this.render();
-
-    this.cellEditorService.show(
-      navigationResult.rowIndex,
-      navigationResult.columnIndex,
-      this.scrollX,
-      this.scrollY
-    );
-
-    this.updateScrollBars();
-  }
-
   private selectAllData(): void {
     const usedRange = this.dataStore.getUsedRange();
 
@@ -903,44 +917,6 @@ export class Grid {
     this.render();
 
     this.updateSelectionDependentUi();
-    this.updateScrollBars();
-  }
-
-  private saveFormulaBarValue(value: string): void {
-    const selection = this.selectionService.getSelection();
-
-    if (!selection) {
-      return;
-    }
-
-    const rowIndex = selection.startRow;
-    const columnIndex = selection.startColumn;
-
-    const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
-    const newValue = this.parseCellValue(value);
-
-    const isSameValue = String(oldValue ?? "") === String(newValue ?? "");
-
-    if (!isSameValue) {
-      const command = new EditCellCommand(
-        this.dataStore,
-        rowIndex,
-        columnIndex,
-        oldValue,
-        newValue
-      );
-
-      this.commandManager.execute(command);
-      void this.persistenceManager.savePersistedState();
-    }
-
-    this.selectionService.setCellSelection(rowIndex, columnIndex);
-
-    this.render();
-
-    this.updateSelectionDependentUi();
-
-    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
     this.updateScrollBars();
   }
 
@@ -1100,81 +1076,11 @@ export class Grid {
   }
 
   private commitCellEditor(): void {
-    if (!this.cellEditorService.isEditing()) {
-      return;
-    }
-
-    this.saveCellEditorValue();
-  }
-
-  private saveCellEditorValue(): void {
-    const editingCell = this.cellEditorService.getEditingCell();
-
-    if (!editingCell) {
-      return;
-    }
-
-    const rowIndex = editingCell.rowIndex;
-    const columnIndex = editingCell.columnIndex;
-
-    const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
-    const editorValue = this.cellEditorService.getValue().trim();
-
-    const newValue = this.parseCellValue(editorValue);
-
-    const isSameValue = String(oldValue ?? "") === String(newValue ?? "");
-
-    if (!isSameValue) {
-      const command = new EditCellCommand(
-        this.dataStore,
-        rowIndex,
-        columnIndex,
-        oldValue,
-        newValue
-      );
-
-      this.commandManager.execute(command);
-      void this.persistenceManager.savePersistedState();
-    }
-
-    this.cellEditorService.hide();
-    this.render();
-
-    this.updateSelectionDependentUi();
-    this.updateScrollBars();
-  }
-
-  private parseCellValue(value: string): CellValue {
-    const trimmedValue = value.trim();
-
-    if (trimmedValue === "") {
-      return null;
-    }
-
-    const numericValue = Number(trimmedValue);
-
-    return Number.isNaN(numericValue) ? value : numericValue;
+    this.cellEditingManager.commitCellEditor();
   }
 
   private handleEditorKeyDown(event: KeyboardEvent): void {
-    if (event.key === "Enter" && event.altKey) {
-      event.preventDefault();
-      this.cellEditorService.insertNewLineAtCursor();
-      return;
-    }
-
-    if (event.key === "Enter") {
-      event.preventDefault();
-      this.saveCellEditorValue();
-      return;
-    }
-
-    if (event.key === "Escape") {
-      event.preventDefault();
-      this.cellEditorService.hide();
-      this.render();
-      this.updateScrollBars();
-    }
+    this.cellEditingManager.handleEditorKeyDown(event);
   }
 
   private handleRowHeaderClick(mouseY: number): void {
