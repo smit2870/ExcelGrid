@@ -16,6 +16,7 @@ import { SelectionManager } from "../managers/SelectionManager";
 import { ClipboardManager } from "../managers/ClipboardManager";
 import { PersistenceManager } from "../managers/PersistenceManager";
 import { CellEditingManager } from "../managers/CellEditingManager";
+import { UndoRedoManager } from "../managers/UndoRedoManager";
 
 import { CanvasUtils } from "../utils/CanvasUtils";
 
@@ -46,6 +47,7 @@ export class Grid {
   private clipboardManager: ClipboardManager;
   private persistenceManager: PersistenceManager;
   private cellEditingManager: CellEditingManager;
+  private undoRedoManager: UndoRedoManager;
 
   private mouseHandler: MouseHandler;
   private keyboardHandler: KeyboardHandler;
@@ -245,6 +247,30 @@ export class Grid {
       }
     );
 
+    this.undoRedoManager = new UndoRedoManager(this.commandManager, {
+      commitCellEditor: () => {
+        this.commitCellEditor();
+      },
+      savePersistedState: () => {
+        void this.persistenceManager.savePersistedState();
+      },
+      limitScrollPosition: () => {
+        this.limitScrollPosition();
+      },
+      render: () => {
+        this.render();
+      },
+      updateCellEditorPosition: () => {
+        this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+      },
+      updateSelectionDependentUi: () => {
+        this.updateSelectionDependentUi();
+      },
+      updateScrollBars: () => {
+        this.updateScrollBars();
+      }
+    });
+
     this.scrollBarService = new ScrollBarService(
       {
         horizontalTrack: document.getElementById("horizontalScrollbar"),
@@ -373,31 +399,13 @@ export class Grid {
 
     if (undoButton) {
       undoButton.addEventListener("click", () => {
-        this.commitCellEditor();
-        this.commandManager.undo();
-        void this.persistenceManager.savePersistedState();
-
-        this.limitScrollPosition();
-        this.render();
-        this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-
-        this.updateSelectionDependentUi();
-        this.updateScrollBars();
+        this.undoRedoManager.undo();
       });
     }
 
     if (redoButton) {
       redoButton.addEventListener("click", () => {
-        this.commitCellEditor();
-        this.commandManager.redo();
-        void this.persistenceManager.savePersistedState();
-
-        this.limitScrollPosition();
-        this.render();
-        this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-
-        this.updateSelectionDependentUi();
-        this.updateScrollBars();
+        this.undoRedoManager.redo();
       });
     }
 
@@ -461,33 +469,13 @@ export class Grid {
 
     if (isUndo) {
       event.preventDefault();
-
-      this.commitCellEditor();
-      this.commandManager.undo();
-      void this.persistenceManager.savePersistedState();
-
-      this.limitScrollPosition();
-      this.render();
-      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-
-      this.updateSelectionDependentUi();
-      this.updateScrollBars();
+      this.undoRedoManager.undo();
       return;
     }
 
     if (isRedo) {
       event.preventDefault();
-
-      this.commitCellEditor();
-      this.commandManager.redo();
-      void this.persistenceManager.savePersistedState();
-
-      this.limitScrollPosition();
-      this.render();
-      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-
-      this.updateSelectionDependentUi();
-      this.updateScrollBars();
+      this.undoRedoManager.redo();
       return;
     }
 
