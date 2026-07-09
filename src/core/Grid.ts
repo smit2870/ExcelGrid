@@ -11,11 +11,10 @@ import { ResizeService } from "../services/ResizeService";
 import { KeyboardNavigationService } from "../services/KeyboardNavigationService";
 import { ScrollBarService } from "../services/ScrollBarService";
 import { FormulaBarService } from "../services/FormulaBarService";
-import { PersistenceService } from "../services/PersistenceService";
-import { ImportExportService } from "../services/ImportExportService";
 
 import { SelectionManager } from "../managers/SelectionManager";
 import { ClipboardManager } from "../managers/ClipboardManager";
+import { PersistenceManager } from "../managers/PersistenceManager";
 
 import { CanvasUtils } from "../utils/CanvasUtils";
 
@@ -27,7 +26,6 @@ import { MouseHandler } from "../events/MouseHandler";
 import { KeyboardHandler } from "../events/KeyboardHandler";
 
 import type { CellValue } from "./GridDataStore";
-import type { GridPersistenceState } from "../services/PersistenceService";
 
 export class Grid {
   private canvas: HTMLCanvasElement;
@@ -43,10 +41,10 @@ export class Grid {
   private keyboardNavigationService: KeyboardNavigationService;
   private scrollBarService: ScrollBarService;
   private formulaBarService: FormulaBarService;
-  private persistenceService: PersistenceService;
-  private importExportService: ImportExportService;
+
   private selectionManager: SelectionManager;
   private clipboardManager: ClipboardManager;
+  private persistenceManager: PersistenceManager;
 
   private mouseHandler: MouseHandler;
   private keyboardHandler: KeyboardHandler;
@@ -125,8 +123,29 @@ export class Grid {
       this.dataStore
     );
 
-    this.persistenceService = new PersistenceService();
-    this.importExportService = new ImportExportService();
+    this.persistenceManager = new PersistenceManager(
+      this.dataStore,
+      this.selectionService,
+      this.statusBarService,
+      this.formulaBarService,
+      {
+        commitCellEditor: () => {
+          this.commitCellEditor();
+        },
+        limitScrollPosition: () => {
+          this.limitScrollPosition();
+        },
+        render: () => {
+          this.render();
+        },
+        updateSelectionDependentUi: () => {
+          this.updateSelectionDependentUi();
+        },
+        updateScrollBars: () => {
+          this.updateScrollBars();
+        }
+      }
+    );
 
     this.selectionManager = new SelectionManager(
       this.canvas,
@@ -182,7 +201,7 @@ export class Grid {
           this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
         },
         savePersistedState: () => {
-          void this.savePersistedState();
+          void this.persistenceManager.savePersistedState();
         }
       }
     );
@@ -239,7 +258,7 @@ export class Grid {
 
     this.initializeCanvas();
     this.loadData();
-    void this.loadPersistedState();
+    void this.persistenceManager.loadPersistedState();
     this.attachEvents();
 
     this.render();
@@ -290,39 +309,6 @@ export class Grid {
     this.dataStore.loadEmployeeRecords(records);
   }
 
-  private async loadPersistedState(): Promise<void> {
-    const persistedState = await this.persistenceService.load();
-
-    if (!persistedState) {
-      return;
-    }
-
-    this.applyPersistenceState(persistedState);
-  }
-
-  private async savePersistedState(): Promise<void> {
-    await this.persistenceService.save(this.getPersistenceState());
-  }
-
-  private getPersistenceState(): GridPersistenceState {
-    return {
-      cells: this.dataStore.getSerializableCells(),
-      rowHeights: this.dataStore.getSerializableRowHeights(),
-      columnWidths: this.dataStore.getSerializableColumnWidths()
-    };
-  }
-
-  private applyPersistenceState(state: GridPersistenceState): void {
-    this.dataStore.loadSerializedCells(state.cells);
-    this.dataStore.loadSerializedRowHeights(state.rowHeights);
-    this.dataStore.loadSerializedColumnWidths(state.columnWidths);
-
-    this.limitScrollPosition();
-    this.render();
-    this.updateSelectionDependentUi();
-    this.updateScrollBars();
-  }
-
   private attachEvents(): void {
     this.mouseHandler.attach();
     this.keyboardHandler.attach();
@@ -350,7 +336,7 @@ export class Grid {
       undoButton.addEventListener("click", () => {
         this.commitCellEditor();
         this.commandManager.undo();
-        void this.savePersistedState();
+        void this.persistenceManager.savePersistedState();
 
         this.limitScrollPosition();
         this.render();
@@ -365,7 +351,7 @@ export class Grid {
       redoButton.addEventListener("click", () => {
         this.commitCellEditor();
         this.commandManager.redo();
-        void this.savePersistedState();
+        void this.persistenceManager.savePersistedState();
 
         this.limitScrollPosition();
         this.render();
@@ -378,14 +364,13 @@ export class Grid {
 
     if (clearSavedDataButton) {
       clearSavedDataButton.addEventListener("click", async () => {
-        await this.persistenceService.clear();
-        window.location.reload();
+        await this.persistenceManager.clearSavedData();
       });
     }
 
     if (exportJsonButton) {
       exportJsonButton.addEventListener("click", () => {
-        this.exportGridData();
+        this.persistenceManager.exportGridData();
       });
     }
 
@@ -401,37 +386,10 @@ export class Grid {
           return;
         }
 
-        await this.importGridData(selectedFile);
+        await this.persistenceManager.importGridData(selectedFile);
         importJsonInput.value = "";
       });
     }
-  }
-
-  private exportGridData(): void {
-    this.commitCellEditor();
-
-    const state = this.getPersistenceState();
-    this.importExportService.exportState(state);
-  }
-
-  private async importGridData(file: File): Promise<void> {
-    this.commitCellEditor();
-
-    const importedState = await this.importExportService.importState(file);
-
-    if (!importedState) {
-      return;
-    }
-
-    this.applyPersistenceState(importedState);
-    await this.savePersistedState();
-
-    this.selectionService.clearSelection();
-    this.statusBarService.reset();
-    this.formulaBarService.clear();
-
-    this.render();
-    this.updateScrollBars();
   }
 
   private handleWheel(event: WheelEvent): void {
@@ -467,7 +425,7 @@ export class Grid {
 
       this.commitCellEditor();
       this.commandManager.undo();
-      void this.savePersistedState();
+      void this.persistenceManager.savePersistedState();
 
       this.limitScrollPosition();
       this.render();
@@ -483,7 +441,7 @@ export class Grid {
 
       this.commitCellEditor();
       this.commandManager.redo();
-      void this.savePersistedState();
+      void this.persistenceManager.savePersistedState();
 
       this.limitScrollPosition();
       this.render();
@@ -699,7 +657,7 @@ export class Grid {
   private handleMouseUp(): void {
     if (this.resizeService.isColumnResizeActive()) {
       this.resizeService.finishColumnResize();
-      void this.savePersistedState();
+      void this.persistenceManager.savePersistedState();
 
       this.canvas.style.cursor = "default";
       this.limitScrollPosition();
@@ -711,7 +669,7 @@ export class Grid {
 
     if (this.resizeService.isRowResizeActive()) {
       this.resizeService.finishRowResize();
-      void this.savePersistedState();
+      void this.persistenceManager.savePersistedState();
 
       this.canvas.style.cursor = "default";
       this.limitScrollPosition();
@@ -940,7 +898,7 @@ export class Grid {
     const command = new ClearCellsCommand(this.dataStore, cellsToClear);
 
     this.commandManager.execute(command);
-    void this.savePersistedState();
+    void this.persistenceManager.savePersistedState();
 
     this.render();
 
@@ -973,7 +931,7 @@ export class Grid {
       );
 
       this.commandManager.execute(command);
-      void this.savePersistedState();
+      void this.persistenceManager.savePersistedState();
     }
 
     this.selectionService.setCellSelection(rowIndex, columnIndex);
@@ -1176,7 +1134,7 @@ export class Grid {
       );
 
       this.commandManager.execute(command);
-      void this.savePersistedState();
+      void this.persistenceManager.savePersistedState();
     }
 
     this.cellEditorService.hide();
