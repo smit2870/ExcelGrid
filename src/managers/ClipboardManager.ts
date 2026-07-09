@@ -178,7 +178,7 @@ export class ClipboardManager {
     this.callbacks.updateScrollBars();
   }
 
-  private clearSelectedCells(): void {
+  clearSelectedCells(): void {
     const selection = this.selectionService.getSelection();
 
     if (!selection) {

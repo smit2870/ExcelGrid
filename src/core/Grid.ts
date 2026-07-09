@@ -18,16 +18,12 @@ import { CellEditingManager } from "../managers/CellEditingManager";
 import { UndoRedoManager } from "../managers/UndoRedoManager";
 import { KeyboardManager } from "../managers/KeyboardManager";
 import { GridScrollManager } from "../managers/GridScrollManager";
-
-import { CanvasUtils } from "../utils/CanvasUtils";
+import { MouseInteractionManager } from "../managers/MouseInteractionManager";
 
 import { CommandManager } from "../commands/CommandManager";
-import { ClearCellsCommand } from "../commands/ClearCellsCommand";
 
 import { MouseHandler } from "../events/MouseHandler";
 import { KeyboardHandler } from "../events/KeyboardHandler";
-
-import type { CellValue } from "./GridDataStore";
 
 export class Grid {
   private canvas: HTMLCanvasElement;
@@ -50,6 +46,7 @@ export class Grid {
   private cellEditingManager: CellEditingManager;
   private undoRedoManager: UndoRedoManager;
   private keyboardManager: KeyboardManager;
+  private mouseInteractionManager: MouseInteractionManager;
 
   private mouseHandler: MouseHandler;
   private keyboardHandler: KeyboardHandler;
@@ -287,13 +284,39 @@ export class Grid {
           this.selectionManager.selectAllData();
         },
         clearSelectedCells: () => {
-          this.clearSelectedCells();
+          this.clipboardManager.clearSelectedCells();
         },
         moveSelectedCell: (rowDelta: number, columnDelta: number) => {
           this.moveSelectedCell(rowDelta, columnDelta);
         },
         extendSelectedRange: (rowDelta: number, columnDelta: number) => {
           this.extendSelectedRange(rowDelta, columnDelta);
+        }
+      }
+    );
+
+    this.mouseInteractionManager = new MouseInteractionManager(
+      this.canvas,
+      this.coordinateService,
+      this.resizeService,
+      this.selectionService,
+      this.cellEditorService,
+      this.statusBarService,
+      this.formulaBarService,
+      this.selectionManager,
+      this.gridScrollManager,
+      {
+        commitCellEditor: () => {
+          this.commitCellEditor();
+        },
+        render: () => {
+          this.render();
+        },
+        updateSelectionDependentUi: () => {
+          this.updateSelectionDependentUi();
+        },
+        savePersistedState: () => {
+          void this.persistenceManager.savePersistedState();
         }
       }
     );
@@ -455,222 +478,19 @@ export class Grid {
   }
 
   private handleMouseDown(event: MouseEvent): void {
-    const mousePosition = CanvasUtils.getMousePosition(this.canvas, event);
-
-    const mouseX = mousePosition.x;
-    const mouseY = mousePosition.y;
-
-    const resizeColumnIndex = this.getColumnResizeIndex(mouseX, mouseY);
-
-    if (resizeColumnIndex !== null) {
-      this.commitCellEditor();
-      this.resizeService.startColumnResize(resizeColumnIndex, mouseX);
-      this.canvas.style.cursor = "col-resize";
-      return;
-    }
-
-    const resizeRowIndex = this.getRowResizeIndex(mouseX, mouseY);
-
-    if (resizeRowIndex !== null) {
-      this.commitCellEditor();
-      this.resizeService.startRowResize(resizeRowIndex, mouseY);
-      this.canvas.style.cursor = "row-resize";
-      return;
-    }
-
-    const isTopLeftCorner =
-      mouseX < GridConfig.rowHeaderWidth &&
-      mouseY < GridConfig.columnHeaderHeight;
-
-    if (isTopLeftCorner) {
-      this.commitCellEditor();
-      this.selectionService.clearSelection();
-      this.statusBarService.reset();
-      this.formulaBarService.clear();
-      this.render();
-      this.gridScrollManager.updateScrollBars();
-      return;
-    }
-
-    const isColumnHeaderClick =
-      mouseX >= GridConfig.rowHeaderWidth &&
-      mouseY < GridConfig.columnHeaderHeight;
-
-    if (isColumnHeaderClick) {
-      this.commitCellEditor();
-      this.selectionManager.selectColumnFromHeader(mouseX);
-      return;
-    }
-
-    const isRowHeaderClick =
-      mouseX < GridConfig.rowHeaderWidth &&
-      mouseY >= GridConfig.columnHeaderHeight;
-
-    if (isRowHeaderClick) {
-      this.commitCellEditor();
-      this.selectionManager.selectRowFromHeader(mouseY);
-      return;
-    }
-
-    this.commitCellEditor();
-    this.selectionManager.startRangeSelection(mouseX, mouseY);
+    this.mouseInteractionManager.handleMouseDown(event);
   }
 
   private handleMouseMove(event: MouseEvent): void {
-    const mousePosition = CanvasUtils.getMousePosition(this.canvas, event);
-
-    const mouseX = mousePosition.x;
-    const mouseY = mousePosition.y;
-
-    if (this.resizeService.isColumnResizeActive()) {
-      this.resizeService.updateColumnResize(mouseX);
-      this.gridScrollManager.limitScrollPosition();
-      this.render();
-      this.gridScrollManager.updateCellEditorPosition();
-      this.gridScrollManager.updateScrollBars();
-      return;
-    }
-
-    if (this.resizeService.isRowResizeActive()) {
-      this.resizeService.updateRowResize(mouseY);
-      this.gridScrollManager.limitScrollPosition();
-      this.render();
-      this.gridScrollManager.updateCellEditorPosition();
-      this.gridScrollManager.updateScrollBars();
-      return;
-    }
-
-    if (this.selectionManager.handleMouseMove(mouseX, mouseY)) {
-      return;
-    }
-
-    const resizeColumnIndex = this.getColumnResizeIndex(mouseX, mouseY);
-    const resizeRowIndex = this.getRowResizeIndex(mouseX, mouseY);
-
-    if (resizeColumnIndex !== null) {
-      this.canvas.style.cursor = "col-resize";
-    } else if (resizeRowIndex !== null) {
-      this.canvas.style.cursor = "row-resize";
-    } else {
-      this.canvas.style.cursor = "default";
-    }
+    this.mouseInteractionManager.handleMouseMove(event);
   }
 
   private handleMouseUp(): void {
-    if (this.resizeService.isColumnResizeActive()) {
-      this.resizeService.finishColumnResize();
-      void this.persistenceManager.savePersistedState();
-
-      this.canvas.style.cursor = "default";
-      this.gridScrollManager.limitScrollPosition();
-      this.render();
-      this.gridScrollManager.updateCellEditorPosition();
-      this.gridScrollManager.updateScrollBars();
-      return;
-    }
-
-    if (this.resizeService.isRowResizeActive()) {
-      this.resizeService.finishRowResize();
-      void this.persistenceManager.savePersistedState();
-
-      this.canvas.style.cursor = "default";
-      this.gridScrollManager.limitScrollPosition();
-      this.render();
-      this.gridScrollManager.updateCellEditorPosition();
-      this.gridScrollManager.updateScrollBars();
-      return;
-    }
-
-    if (this.selectionManager.handleMouseUp()) {
-      return;
-    }
-
-    this.selectionManager.cancelSelection();
-  }
-
-  private getColumnResizeIndex(mouseX: number, mouseY: number): number | null {
-    const { scrollX } = this.gridScrollManager.getScrollPosition();
-
-    return this.coordinateService.getColumnResizeIndex(
-      mouseX,
-      mouseY,
-      scrollX
-    );
-  }
-
-  private getRowResizeIndex(mouseX: number, mouseY: number): number | null {
-    const { scrollY } = this.gridScrollManager.getScrollPosition();
-
-    return this.coordinateService.getRowResizeIndex(mouseX, mouseY, scrollY);
-  }
-
-  private getColumnIndexFromMouseX(mouseX: number): number | null {
-    const { scrollX } = this.gridScrollManager.getScrollPosition();
-
-    return this.coordinateService.getColumnIndexFromMouseX(mouseX, scrollX);
-  }
-
-  private getRowIndexFromMouseY(mouseY: number): number | null {
-    const { scrollY } = this.gridScrollManager.getScrollPosition();
-
-    return this.coordinateService.getRowIndexFromMouseY(mouseY, scrollY);
-  }
-
-  private getCellPositionFromMouse(
-    mouseX: number,
-    mouseY: number
-  ): { rowIndex: number; columnIndex: number } | null {
-    const isInsideCellArea =
-      mouseX >= GridConfig.rowHeaderWidth &&
-      mouseY >= GridConfig.columnHeaderHeight;
-
-    if (!isInsideCellArea) {
-      return null;
-    }
-
-    const columnIndex = this.getColumnIndexFromMouseX(mouseX);
-    const rowIndex = this.getRowIndexFromMouseY(mouseY);
-
-    if (columnIndex === null || rowIndex === null) {
-      return null;
-    }
-
-    return {
-      rowIndex,
-      columnIndex
-    };
+    this.mouseInteractionManager.handleMouseUp();
   }
 
   private handleDoubleClick(event: MouseEvent): void {
-    const mousePosition = CanvasUtils.getMousePosition(this.canvas, event);
-
-    const cellPosition = this.getCellPositionFromMouse(
-      mousePosition.x,
-      mousePosition.y
-    );
-
-    if (!cellPosition) {
-      return;
-    }
-
-    this.selectionService.setCellSelection(
-      cellPosition.rowIndex,
-      cellPosition.columnIndex
-    );
-
-    this.updateSelectionDependentUi();
-    this.render();
-
-    const { scrollX, scrollY } = this.gridScrollManager.getScrollPosition();
-
-    this.cellEditorService.show(
-      cellPosition.rowIndex,
-      cellPosition.columnIndex,
-      scrollX,
-      scrollY
-    );
-
-    this.gridScrollManager.updateScrollBars();
+    this.mouseInteractionManager.handleDoubleClick(event);
   }
 
   private moveSelectedCell(rowDelta: number, columnDelta: number): void {
@@ -718,59 +538,6 @@ export class Grid {
     this.gridScrollManager.updateScrollBars();
 
     this.scheduleSelectionDependentUiUpdate();
-  }
-
-  private clearSelectedCells(): void {
-    const selection = this.selectionService.getSelection();
-
-    if (!selection) {
-      return;
-    }
-
-    const startRow = Math.min(selection.startRow, selection.endRow);
-    const endRow = Math.max(selection.startRow, selection.endRow);
-    const startColumn = Math.min(selection.startColumn, selection.endColumn);
-    const endColumn = Math.max(selection.startColumn, selection.endColumn);
-
-    const cellsToClear: Array<{
-      rowIndex: number;
-      columnIndex: number;
-      oldValue: CellValue;
-    }> = [];
-
-    for (let rowIndex = startRow; rowIndex <= endRow; rowIndex++) {
-      for (
-        let columnIndex = startColumn;
-        columnIndex <= endColumn;
-        columnIndex++
-      ) {
-        const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
-
-        if (oldValue === null) {
-          continue;
-        }
-
-        cellsToClear.push({
-          rowIndex,
-          columnIndex,
-          oldValue
-        });
-      }
-    }
-
-    if (cellsToClear.length === 0) {
-      return;
-    }
-
-    const command = new ClearCellsCommand(this.dataStore, cellsToClear);
-
-    this.commandManager.execute(command);
-    void this.persistenceManager.savePersistedState();
-
-    this.render();
-
-    this.updateSelectionDependentUi();
-    this.gridScrollManager.updateScrollBars();
   }
 
   private commitCellEditor(): void {
