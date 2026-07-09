@@ -13,6 +13,7 @@ import { ClipboardService } from "../services/ClipboardService";
 import { ScrollBarService } from "../services/ScrollBarService";
 import { FormulaBarService } from "../services/FormulaBarService";
 import { PersistenceService } from "../services/PersistenceService";
+import { ImportExportService } from "../services/ImportExportService";
 
 import { CanvasUtils } from "../utils/CanvasUtils";
 
@@ -28,6 +29,7 @@ import { MouseHandler } from "../events/MouseHandler";
 import { KeyboardHandler } from "../events/KeyboardHandler";
 
 import type { CellValue } from "./GridDataStore";
+import type { GridPersistenceState } from "../services/PersistenceService";
 
 export class Grid {
   private canvas: HTMLCanvasElement;
@@ -45,6 +47,7 @@ export class Grid {
   private scrollBarService: ScrollBarService;
   private formulaBarService: FormulaBarService;
   private persistenceService: PersistenceService;
+  private importExportService: ImportExportService;
 
   private mouseHandler: MouseHandler;
   private keyboardHandler: KeyboardHandler;
@@ -133,6 +136,7 @@ export class Grid {
     );
 
     this.persistenceService = new PersistenceService();
+    this.importExportService = new ImportExportService();
 
     this.scrollBarService = new ScrollBarService(
       {
@@ -244,22 +248,30 @@ export class Grid {
       return;
     }
 
-    this.dataStore.loadSerializedCells(persistedState.cells);
-    this.dataStore.loadSerializedRowHeights(persistedState.rowHeights);
-    this.dataStore.loadSerializedColumnWidths(persistedState.columnWidths);
+    this.applyPersistenceState(persistedState);
+  }
+
+  private async savePersistedState(): Promise<void> {
+    await this.persistenceService.save(this.getPersistenceState());
+  }
+
+  private getPersistenceState(): GridPersistenceState {
+    return {
+      cells: this.dataStore.getSerializableCells(),
+      rowHeights: this.dataStore.getSerializableRowHeights(),
+      columnWidths: this.dataStore.getSerializableColumnWidths()
+    };
+  }
+
+  private applyPersistenceState(state: GridPersistenceState): void {
+    this.dataStore.loadSerializedCells(state.cells);
+    this.dataStore.loadSerializedRowHeights(state.rowHeights);
+    this.dataStore.loadSerializedColumnWidths(state.columnWidths);
 
     this.limitScrollPosition();
     this.render();
     this.updateSelectionDependentUi();
     this.updateScrollBars();
-  }
-
-  private async savePersistedState(): Promise<void> {
-    await this.persistenceService.save({
-      cells: this.dataStore.getSerializableCells(),
-      rowHeights: this.dataStore.getSerializableRowHeights(),
-      columnWidths: this.dataStore.getSerializableColumnWidths()
-    });
   }
 
   private attachEvents(): void {
@@ -279,6 +291,11 @@ export class Grid {
     const undoButton = document.getElementById("undoBtn");
     const redoButton = document.getElementById("redoBtn");
     const clearSavedDataButton = document.getElementById("clearSavedDataBtn");
+    const exportJsonButton = document.getElementById("exportJsonBtn");
+    const importJsonButton = document.getElementById("importJsonBtn");
+    const importJsonInput = document.getElementById(
+      "importJsonInput"
+    ) as HTMLInputElement | null;
 
     if (undoButton) {
       undoButton.addEventListener("click", () => {
@@ -316,6 +333,56 @@ export class Grid {
         window.location.reload();
       });
     }
+
+    if (exportJsonButton) {
+      exportJsonButton.addEventListener("click", () => {
+        this.exportGridData();
+      });
+    }
+
+    if (importJsonButton && importJsonInput) {
+      importJsonButton.addEventListener("click", () => {
+        importJsonInput.click();
+      });
+
+      importJsonInput.addEventListener("change", async () => {
+        const selectedFile = importJsonInput.files?.[0];
+
+        if (!selectedFile) {
+          return;
+        }
+
+        await this.importGridData(selectedFile);
+        importJsonInput.value = "";
+      });
+    }
+  }
+
+  private exportGridData(): void {
+    this.commitCellEditor();
+
+    const state = this.getPersistenceState();
+    this.importExportService.exportState(state);
+  }
+
+  private async importGridData(file: File): Promise<void> {
+    this.commitCellEditor();
+
+    const importedState = await this.importExportService.importState(file);
+
+    if (!importedState) {
+      return;
+    }
+
+    this.applyPersistenceState(importedState);
+    await this.savePersistedState();
+
+    this.selectionService.clearSelection();
+    this.statusBarService.reset();
+    this.formulaBarService.clear();
+
+    this.render();
+    this.updateScrollBars();
   }
 
   private handleWheel(event: WheelEvent): void {
