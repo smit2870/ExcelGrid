@@ -17,6 +17,7 @@ import { ClipboardManager } from "../managers/ClipboardManager";
 import { PersistenceManager } from "../managers/PersistenceManager";
 import { CellEditingManager } from "../managers/CellEditingManager";
 import { UndoRedoManager } from "../managers/UndoRedoManager";
+import { KeyboardManager } from "../managers/KeyboardManager";
 
 import { CanvasUtils } from "../utils/CanvasUtils";
 
@@ -48,6 +49,7 @@ export class Grid {
   private persistenceManager: PersistenceManager;
   private cellEditingManager: CellEditingManager;
   private undoRedoManager: UndoRedoManager;
+  private keyboardManager: KeyboardManager;
 
   private mouseHandler: MouseHandler;
   private keyboardHandler: KeyboardHandler;
@@ -271,6 +273,27 @@ export class Grid {
       }
     });
 
+    this.keyboardManager = new KeyboardManager(
+      this.cellEditorService,
+      this.clipboardManager,
+      this.cellEditingManager,
+      this.undoRedoManager,
+      {
+        selectAllData: () => {
+          this.selectAllData();
+        },
+        clearSelectedCells: () => {
+          this.clearSelectedCells();
+        },
+        moveSelectedCell: (rowDelta: number, columnDelta: number) => {
+          this.moveSelectedCell(rowDelta, columnDelta);
+        },
+        extendSelectedRange: (rowDelta: number, columnDelta: number) => {
+          this.extendSelectedRange(rowDelta, columnDelta);
+        }
+      }
+    );
+
     this.scrollBarService = new ScrollBarService(
       {
         horizontalTrack: document.getElementById("horizontalScrollbar"),
@@ -452,131 +475,7 @@ export class Grid {
   }
 
   private async handleGlobalKeyDown(event: KeyboardEvent): Promise<void> {
-    const target = event.target as HTMLElement | null;
-    const isFormulaBarFocused = target?.id === "formulaBar";
-    const isNameBoxFocused = target?.id === "nameBox";
-
-    const isUndo = event.ctrlKey && event.key.toLowerCase() === "z";
-    const isRedo = event.ctrlKey && event.key.toLowerCase() === "y";
-    const isCopy = event.ctrlKey && event.key.toLowerCase() === "c";
-    const isCut = event.ctrlKey && event.key.toLowerCase() === "x";
-    const isPaste = event.ctrlKey && event.key.toLowerCase() === "v";
-    const isSelectAll = event.ctrlKey && event.key.toLowerCase() === "a";
-
-    if (isFormulaBarFocused || isNameBoxFocused) {
-      return;
-    }
-
-    if (isUndo) {
-      event.preventDefault();
-      this.undoRedoManager.undo();
-      return;
-    }
-
-    if (isRedo) {
-      event.preventDefault();
-      this.undoRedoManager.redo();
-      return;
-    }
-
-    if (this.cellEditorService.isEditing()) {
-      return;
-    }
-
-    if (isSelectAll) {
-      event.preventDefault();
-      this.selectAllData();
-      return;
-    }
-
-    if (isCopy) {
-      event.preventDefault();
-      await this.clipboardManager.copySelectedCells();
-      return;
-    }
-
-    if (isCut) {
-      event.preventDefault();
-      await this.clipboardManager.cutSelectedCells();
-      return;
-    }
-
-    if (isPaste) {
-      event.preventDefault();
-      await this.clipboardManager.pasteCellsFromClipboard();
-      return;
-    }
-
-    if (event.key === "Delete") {
-      event.preventDefault();
-      this.clearSelectedCells();
-      return;
-    }
-
-    if (event.shiftKey && event.key === "ArrowRight") {
-      event.preventDefault();
-      this.extendSelectedRange(0, 1);
-      return;
-    }
-
-    if (event.shiftKey && event.key === "ArrowLeft") {
-      event.preventDefault();
-      this.extendSelectedRange(0, -1);
-      return;
-    }
-
-    if (event.shiftKey && event.key === "ArrowDown") {
-      event.preventDefault();
-      this.extendSelectedRange(1, 0);
-      return;
-    }
-
-    if (event.shiftKey && event.key === "ArrowUp") {
-      event.preventDefault();
-      this.extendSelectedRange(-1, 0);
-      return;
-    }
-
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      this.moveSelectedCell(0, 1);
-      return;
-    }
-
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      this.moveSelectedCell(0, -1);
-      return;
-    }
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      this.moveSelectedCell(1, 0);
-      return;
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      this.moveSelectedCell(-1, 0);
-      return;
-    }
-
-    if (event.key === "Tab" && event.shiftKey) {
-      event.preventDefault();
-      this.moveSelectedCell(0, -1);
-      return;
-    }
-
-    if (event.key === "Tab") {
-      event.preventDefault();
-      this.moveSelectedCell(0, 1);
-      return;
-    }
-
-    if (event.key === "Enter") {
-      event.preventDefault();
-      this.cellEditingManager.startEditingSelectedCell();
-    }
+    await this.keyboardManager.handleGlobalKeyDown(event);
   }
 
   private handleMouseDown(event: MouseEvent): void {
