@@ -12,6 +12,7 @@ import { KeyboardNavigationService } from "../services/KeyboardNavigationService
 import { ClipboardService } from "../services/ClipboardService";
 import { ScrollBarService } from "../services/ScrollBarService";
 import { FormulaBarService } from "../services/FormulaBarService";
+import { PersistenceService } from "../services/PersistenceService";
 
 import { CanvasUtils } from "../utils/CanvasUtils";
 
@@ -43,6 +44,7 @@ export class Grid {
   private clipboardService: ClipboardService;
   private scrollBarService: ScrollBarService;
   private formulaBarService: FormulaBarService;
+  private persistenceService: PersistenceService;
 
   private mouseHandler: MouseHandler;
   private keyboardHandler: KeyboardHandler;
@@ -70,15 +72,18 @@ export class Grid {
     this.isSelectingRange = false;
     this.rangeStartRow = 0;
     this.rangeStartColumn = 0;
-
     this.selectionUiUpdateTimer = null;
 
     this.statusBar = document.getElementById("statusBar");
+
     this.cellEditor = document.getElementById(
       "cellEditor"
     ) as HTMLTextAreaElement | null;
 
-    this.nameBox = document.getElementById("nameBox") as HTMLInputElement | null;
+    this.nameBox = document.getElementById(
+      "nameBox"
+    ) as HTMLInputElement | null;
+
     this.formulaBar = document.getElementById(
       "formulaBar"
     ) as HTMLTextAreaElement | null;
@@ -126,6 +131,8 @@ export class Grid {
       this.formulaBar,
       this.dataStore
     );
+
+    this.persistenceService = new PersistenceService();
 
     this.scrollBarService = new ScrollBarService(
       {
@@ -179,7 +186,9 @@ export class Grid {
 
     this.initializeCanvas();
     this.loadData();
+    void this.loadPersistedState();
     this.attachEvents();
+
     this.render();
     this.updateScrollBars();
 
@@ -228,6 +237,31 @@ export class Grid {
     this.dataStore.loadEmployeeRecords(records);
   }
 
+  private async loadPersistedState(): Promise<void> {
+    const persistedState = await this.persistenceService.load();
+
+    if (!persistedState) {
+      return;
+    }
+
+    this.dataStore.loadSerializedCells(persistedState.cells);
+    this.dataStore.loadSerializedRowHeights(persistedState.rowHeights);
+    this.dataStore.loadSerializedColumnWidths(persistedState.columnWidths);
+
+    this.limitScrollPosition();
+    this.render();
+    this.updateSelectionDependentUi();
+    this.updateScrollBars();
+  }
+
+  private async savePersistedState(): Promise<void> {
+    await this.persistenceService.save({
+      cells: this.dataStore.getSerializableCells(),
+      rowHeights: this.dataStore.getSerializableRowHeights(),
+      columnWidths: this.dataStore.getSerializableColumnWidths()
+    });
+  }
+
   private attachEvents(): void {
     this.mouseHandler.attach();
     this.keyboardHandler.attach();
@@ -244,11 +278,13 @@ export class Grid {
 
     const undoButton = document.getElementById("undoBtn");
     const redoButton = document.getElementById("redoBtn");
+    const clearSavedDataButton = document.getElementById("clearSavedDataBtn");
 
     if (undoButton) {
       undoButton.addEventListener("click", () => {
         this.commitCellEditor();
         this.commandManager.undo();
+        void this.savePersistedState();
 
         this.limitScrollPosition();
         this.render();
@@ -263,6 +299,7 @@ export class Grid {
       redoButton.addEventListener("click", () => {
         this.commitCellEditor();
         this.commandManager.redo();
+        void this.savePersistedState();
 
         this.limitScrollPosition();
         this.render();
@@ -270,6 +307,13 @@ export class Grid {
 
         this.updateSelectionDependentUi();
         this.updateScrollBars();
+      });
+    }
+
+    if (clearSavedDataButton) {
+      clearSavedDataButton.addEventListener("click", async () => {
+        await this.persistenceService.clear();
+        window.location.reload();
       });
     }
   }
@@ -307,6 +351,7 @@ export class Grid {
 
       this.commitCellEditor();
       this.commandManager.undo();
+      void this.savePersistedState();
 
       this.limitScrollPosition();
       this.render();
@@ -322,6 +367,7 @@ export class Grid {
 
       this.commitCellEditor();
       this.commandManager.redo();
+      void this.savePersistedState();
 
       this.limitScrollPosition();
       this.render();
@@ -553,6 +599,8 @@ export class Grid {
   private handleMouseUp(): void {
     if (this.resizeService.isColumnResizeActive()) {
       this.resizeService.finishColumnResize();
+      void this.savePersistedState();
+
       this.canvas.style.cursor = "default";
       this.limitScrollPosition();
       this.render();
@@ -563,6 +611,8 @@ export class Grid {
 
     if (this.resizeService.isRowResizeActive()) {
       this.resizeService.finishRowResize();
+      void this.savePersistedState();
+
       this.canvas.style.cursor = "default";
       this.limitScrollPosition();
       this.render();
@@ -626,7 +676,6 @@ export class Grid {
     );
 
     this.updateSelectionDependentUi();
-
     this.render();
 
     this.cellEditorService.show(
@@ -816,6 +865,8 @@ export class Grid {
     const command = new ClearCellsCommand(this.dataStore, cellsToClear);
 
     this.commandManager.execute(command);
+    void this.savePersistedState();
+
     this.render();
 
     this.updateSelectionDependentUi();
@@ -909,6 +960,7 @@ export class Grid {
         }
 
         const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
+
         const newValue = this.clipboardService.convertTextToCellValue(
           row[columnOffset]
         );
@@ -929,6 +981,7 @@ export class Grid {
     const command = new PasteCellsCommand(this.dataStore, pastedCells);
 
     this.commandManager.execute(command);
+    void this.savePersistedState();
 
     const pastedRowCount = parsedRows.length;
     const pastedColumnCount = Math.max(...parsedRows.map((row) => row.length));
@@ -986,6 +1039,7 @@ export class Grid {
       );
 
       this.commandManager.execute(command);
+      void this.savePersistedState();
     }
 
     this.selectionService.setCellSelection(rowIndex, columnIndex);
@@ -1188,6 +1242,7 @@ export class Grid {
       );
 
       this.commandManager.execute(command);
+      void this.savePersistedState();
     }
 
     this.cellEditorService.hide();
@@ -1270,7 +1325,7 @@ export class Grid {
     this.selectionUiUpdateTimer = window.setTimeout(() => {
       this.updateSelectionDependentUi();
       this.selectionUiUpdateTimer = null;
-    }, 10);  // setting timeout
+    }, 120);
   }
 
   private flushSelectionDependentUiUpdate(): void {

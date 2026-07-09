@@ -1,5 +1,10 @@
 import { GridConfig } from "./GridConfig";
 import type { EmployeeRecord } from "../services/DataGenerator";
+import type {
+  SerializedCell,
+  SerializedColumnWidth,
+  SerializedRowHeight
+} from "../services/PersistenceService";
 
 export type CellValue = string | number | null;
 
@@ -62,6 +67,8 @@ export class GridDataStore {
   }
 
   loadEmployeeRecords(records: EmployeeRecord[]): void {
+    this.cells.clear();
+
     records.forEach((record, rowIndex) => {
       this.setCellValue(rowIndex, 0, record.id);
       this.setCellValue(rowIndex, 1, record.firstName);
@@ -116,5 +123,73 @@ export class GridDataStore {
       startColumn,
       endColumn
     };
+  }
+
+  getSerializableCells(): SerializedCell[] {
+    const serializedCells: SerializedCell[] = [];
+
+    this.forEachCell((rowIndex, columnIndex, value) => {
+      serializedCells.push({
+        rowIndex,
+        columnIndex,
+        value
+      });
+    });
+
+    return serializedCells;
+  }
+
+  loadSerializedCells(cells: SerializedCell[]): void {
+    this.cells.clear();
+
+    for (const cell of cells) {
+      if (cell.value === null || cell.value === "") {
+        continue;
+      }
+
+      this.setCellValue(cell.rowIndex, cell.columnIndex, cell.value);
+    }
+  }
+
+  getSerializableRowHeights(): SerializedRowHeight[] {
+    const serializedRowHeights: SerializedRowHeight[] = [];
+
+    this.rowHeights.forEach((height, rowIndex) => {
+      serializedRowHeights.push({
+        rowIndex,
+        height
+      });
+    });
+
+    return serializedRowHeights;
+  }
+
+  loadSerializedRowHeights(rowHeights: SerializedRowHeight[]): void {
+    this.rowHeights.clear();
+
+    for (const rowHeight of rowHeights) {
+      this.setRowHeight(rowHeight.rowIndex, rowHeight.height);
+    }
+  }
+
+  getSerializableColumnWidths(): SerializedColumnWidth[] {
+    const serializedColumnWidths: SerializedColumnWidth[] = [];
+
+    this.columnWidths.forEach((width, columnIndex) => {
+      serializedColumnWidths.push({
+        columnIndex,
+        width
+      });
+    });
+
+    return serializedColumnWidths;
+  }
+
+  loadSerializedColumnWidths(columnWidths: SerializedColumnWidth[]): void {
+    this.columnWidths.clear();
+
+    for (const columnWidth of columnWidths) {
+      this.setColumnWidth(columnWidth.columnIndex, columnWidth.width);
+    }
   }
 }
