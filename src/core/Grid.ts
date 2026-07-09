@@ -66,6 +66,10 @@ export class Grid {
 
   private selectionUiUpdateTimer: number | null;
 
+  private selectionAutoScrollFrameId: number | null;
+  private lastSelectionMouseX: number;
+  private lastSelectionMouseY: number;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
 
@@ -75,7 +79,12 @@ export class Grid {
     this.isSelectingRange = false;
     this.rangeStartRow = 0;
     this.rangeStartColumn = 0;
+
     this.selectionUiUpdateTimer = null;
+
+    this.selectionAutoScrollFrameId = null;
+    this.lastSelectionMouseX = 0;
+    this.lastSelectionMouseY = 0;
 
     this.statusBar = document.getElementById("statusBar");
 
@@ -646,18 +655,11 @@ export class Grid {
       return;
     }
 
-    const cellPosition = this.getCellPositionFromMouse(mouseX, mouseY);
+    this.lastSelectionMouseX = mouseX;
+    this.lastSelectionMouseY = mouseY;
 
-    if (!cellPosition) {
-      return;
-    }
-
-    this.selectionService.setRangeSelection(
-      this.rangeStartRow,
-      this.rangeStartColumn,
-      cellPosition.rowIndex,
-      cellPosition.columnIndex
-    );
+    this.updateRangeSelectionFromMouse(mouseX, mouseY);
+    this.startSelectionAutoScroll();
 
     this.render();
     this.scheduleSelectionDependentUiUpdate();
@@ -690,12 +692,15 @@ export class Grid {
 
     if (this.isSelectingRange) {
       this.isSelectingRange = false;
+      this.stopSelectionAutoScroll();
+
       this.flushSelectionDependentUiUpdate();
       this.updateScrollBars();
       return;
     }
 
     this.isSelectingRange = false;
+    this.stopSelectionAutoScroll();
   }
 
   private getColumnResizeIndex(mouseX: number, mouseY: number): number | null {
@@ -766,6 +771,9 @@ export class Grid {
     this.rangeStartRow = cellPosition.rowIndex;
     this.rangeStartColumn = cellPosition.columnIndex;
 
+    this.lastSelectionMouseX = mouseX;
+    this.lastSelectionMouseY = mouseY;
+
     this.selectionService.setCellSelection(
       cellPosition.rowIndex,
       cellPosition.columnIndex
@@ -800,6 +808,148 @@ export class Grid {
       rowIndex,
       columnIndex
     };
+  }
+
+  private updateRangeSelectionFromMouse(mouseX: number, mouseY: number): void {
+    const clampedPosition = this.getClampedSelectionMousePosition(
+      mouseX,
+      mouseY
+    );
+
+    const cellPosition = this.getCellPositionFromMouse(
+      clampedPosition.x,
+      clampedPosition.y
+    );
+
+    if (!cellPosition) {
+      return;
+    }
+
+    this.selectionService.setRangeSelection(
+      this.rangeStartRow,
+      this.rangeStartColumn,
+      cellPosition.rowIndex,
+      cellPosition.columnIndex
+    );
+  }
+
+  private getClampedSelectionMousePosition(
+    mouseX: number,
+    mouseY: number
+  ): { x: number; y: number } {
+    const scrollbarSize = 14;
+
+    const minX = GridConfig.rowHeaderWidth;
+    const maxX = this.canvas.clientWidth - scrollbarSize - 1;
+
+    const minY = GridConfig.columnHeaderHeight;
+    const maxY = this.canvas.clientHeight - scrollbarSize - 1;
+
+    return {
+      x: Math.max(minX, Math.min(mouseX, maxX)),
+      y: Math.max(minY, Math.min(mouseY, maxY))
+    };
+  }
+
+  private startSelectionAutoScroll(): void {
+    if (this.selectionAutoScrollFrameId !== null) {
+      return;
+    }
+
+    const autoScroll = (): void => {
+      if (!this.isSelectingRange) {
+        this.stopSelectionAutoScroll();
+        return;
+      }
+
+      const scrollDelta = this.getSelectionAutoScrollDelta();
+
+      const hasScrollDelta =
+        scrollDelta.deltaX !== 0 || scrollDelta.deltaY !== 0;
+
+      if (hasScrollDelta) {
+        this.scrollX += scrollDelta.deltaX;
+        this.scrollY += scrollDelta.deltaY;
+
+        this.limitScrollPosition();
+
+        this.updateRangeSelectionFromMouse(
+          this.lastSelectionMouseX,
+          this.lastSelectionMouseY
+        );
+
+        this.render();
+        this.updateScrollBars();
+        this.scheduleSelectionDependentUiUpdate();
+      }
+
+      this.selectionAutoScrollFrameId =
+        window.requestAnimationFrame(autoScroll);
+    };
+
+    this.selectionAutoScrollFrameId = window.requestAnimationFrame(autoScroll);
+  }
+
+  private stopSelectionAutoScroll(): void {
+    if (this.selectionAutoScrollFrameId === null) {
+      return;
+    }
+
+    window.cancelAnimationFrame(this.selectionAutoScrollFrameId);
+    this.selectionAutoScrollFrameId = null;
+  }
+
+  private getSelectionAutoScrollDelta(): {
+    deltaX: number;
+    deltaY: number;
+  } {
+    const edgeThreshold = 36;
+    const maxSpeed = 22;
+    const scrollbarSize = 14;
+
+    let deltaX = 0;
+    let deltaY = 0;
+
+    const leftEdge = GridConfig.rowHeaderWidth + edgeThreshold;
+    const rightEdge = this.canvas.clientWidth - scrollbarSize - edgeThreshold;
+
+    const topEdge = GridConfig.columnHeaderHeight + edgeThreshold;
+    const bottomEdge = this.canvas.clientHeight - scrollbarSize - edgeThreshold;
+
+    if (this.lastSelectionMouseX < leftEdge) {
+      const distance = leftEdge - this.lastSelectionMouseX;
+      deltaX = -this.getAutoScrollSpeed(distance, edgeThreshold, maxSpeed);
+    }
+
+    if (this.lastSelectionMouseX > rightEdge) {
+      const distance = this.lastSelectionMouseX - rightEdge;
+      deltaX = this.getAutoScrollSpeed(distance, edgeThreshold, maxSpeed);
+    }
+
+    if (this.lastSelectionMouseY < topEdge) {
+      const distance = topEdge - this.lastSelectionMouseY;
+      deltaY = -this.getAutoScrollSpeed(distance, edgeThreshold, maxSpeed);
+    }
+
+    if (this.lastSelectionMouseY > bottomEdge) {
+      const distance = this.lastSelectionMouseY - bottomEdge;
+      deltaY = this.getAutoScrollSpeed(distance, edgeThreshold, maxSpeed);
+    }
+
+    return {
+      deltaX,
+      deltaY
+    };
+  }
+
+  private getAutoScrollSpeed(
+    distance: number,
+    threshold: number,
+    maxSpeed: number
+  ): number {
+    const normalizedDistance = Math.min(distance / threshold, 1);
+
+    return Math.ceil(normalizedDistance * maxSpeed);
   }
 
   private moveSelectedCell(rowDelta: number, columnDelta: number): void {
@@ -1360,6 +1510,8 @@ export class Grid {
     }
 
     this.isSelectingRange = false;
+    this.stopSelectionAutoScroll();
+
     this.selectionService.setRowSelection(rowIndex);
 
     this.updateSelectionDependentUi();
@@ -1376,6 +1528,8 @@ export class Grid {
     }
 
     this.isSelectingRange = false;
+    this.stopSelectionAutoScroll();
+
     this.selectionService.setColumnSelection(columnIndex);
 
     this.updateSelectionDependentUi();
@@ -1392,7 +1546,7 @@ export class Grid {
     this.selectionUiUpdateTimer = window.setTimeout(() => {
       this.updateSelectionDependentUi();
       this.selectionUiUpdateTimer = null;
-    }, 120);
+    }, 20);
   }
 
   private flushSelectionDependentUiUpdate(): void {
@@ -1465,6 +1619,7 @@ export class Grid {
 
   private render(): void {
     const selection = this.selectionService.getSelection();
+
     this.renderer.render(this.scrollX, this.scrollY, selection);
   }
 }
