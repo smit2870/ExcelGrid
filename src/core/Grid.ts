@@ -9,7 +9,6 @@ import { StatusBarService } from "../services/StatusBarService";
 import { CellEditorService } from "../services/CellEditorService";
 import { ResizeService } from "../services/ResizeService";
 import { KeyboardNavigationService } from "../services/KeyboardNavigationService";
-import { ScrollBarService } from "../services/ScrollBarService";
 import { FormulaBarService } from "../services/FormulaBarService";
 
 import { SelectionManager } from "../managers/SelectionManager";
@@ -18,6 +17,7 @@ import { PersistenceManager } from "../managers/PersistenceManager";
 import { CellEditingManager } from "../managers/CellEditingManager";
 import { UndoRedoManager } from "../managers/UndoRedoManager";
 import { KeyboardManager } from "../managers/KeyboardManager";
+import { GridScrollManager } from "../managers/GridScrollManager";
 
 import { CanvasUtils } from "../utils/CanvasUtils";
 
@@ -41,9 +41,9 @@ export class Grid {
   private cellEditorService: CellEditorService;
   private resizeService: ResizeService;
   private keyboardNavigationService: KeyboardNavigationService;
-  private scrollBarService: ScrollBarService;
   private formulaBarService: FormulaBarService;
 
+  private gridScrollManager: GridScrollManager;
   private selectionManager: SelectionManager;
   private clipboardManager: ClipboardManager;
   private persistenceManager: PersistenceManager;
@@ -59,16 +59,10 @@ export class Grid {
   private nameBox: HTMLInputElement | null;
   private formulaBar: HTMLTextAreaElement | null;
 
-  private scrollX: number;
-  private scrollY: number;
-
   private selectionUiUpdateTimer: number | null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-
-    this.scrollX = 0;
-    this.scrollY = 0;
 
     this.selectionUiUpdateTimer = null;
 
@@ -128,6 +122,19 @@ export class Grid {
       this.dataStore
     );
 
+    this.renderer = new GridRenderer(this.canvas, this.dataStore);
+
+    this.gridScrollManager = new GridScrollManager(
+      this.canvas,
+      this.coordinateService,
+      this.cellEditorService,
+      {
+        render: () => {
+          this.render();
+        }
+      }
+    );
+
     this.persistenceManager = new PersistenceManager(
       this.dataStore,
       this.selectionService,
@@ -138,7 +145,7 @@ export class Grid {
           this.commitCellEditor();
         },
         limitScrollPosition: () => {
-          this.limitScrollPosition();
+          this.gridScrollManager.limitScrollPosition();
         },
         render: () => {
           this.render();
@@ -147,7 +154,7 @@ export class Grid {
           this.updateSelectionDependentUi();
         },
         updateScrollBars: () => {
-          this.updateScrollBars();
+          this.gridScrollManager.updateScrollBars();
         }
       }
     );
@@ -160,23 +167,19 @@ export class Grid {
       this.keyboardNavigationService,
       {
         getScrollPosition: () => {
-          return {
-            scrollX: this.scrollX,
-            scrollY: this.scrollY
-          };
+          return this.gridScrollManager.getScrollPosition();
         },
         setScrollPosition: (scrollX: number, scrollY: number) => {
-          this.scrollX = scrollX;
-          this.scrollY = scrollY;
+          this.gridScrollManager.setScrollPosition(scrollX, scrollY);
         },
         limitScrollPosition: () => {
-          this.limitScrollPosition();
+          this.gridScrollManager.limitScrollPosition();
         },
         render: () => {
           this.render();
         },
         updateScrollBars: () => {
-          this.updateScrollBars();
+          this.gridScrollManager.updateScrollBars();
         },
         updateSelectionDependentUi: () => {
           this.updateSelectionDependentUi();
@@ -188,7 +191,7 @@ export class Grid {
           this.flushSelectionDependentUiUpdate();
         },
         updateCellEditorPosition: () => {
-          this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+          this.gridScrollManager.updateCellEditorPosition();
         }
       }
     );
@@ -205,10 +208,10 @@ export class Grid {
           this.updateSelectionDependentUi();
         },
         updateScrollBars: () => {
-          this.updateScrollBars();
+          this.gridScrollManager.updateScrollBars();
         },
         updateCellEditorPosition: () => {
-          this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+          this.gridScrollManager.updateCellEditorPosition();
         },
         savePersistedState: () => {
           void this.persistenceManager.savePersistedState();
@@ -224,17 +227,13 @@ export class Grid {
       this.keyboardNavigationService,
       {
         getScrollPosition: () => {
-          return {
-            scrollX: this.scrollX,
-            scrollY: this.scrollY
-          };
+          return this.gridScrollManager.getScrollPosition();
         },
         setScrollPosition: (scrollX: number, scrollY: number) => {
-          this.scrollX = scrollX;
-          this.scrollY = scrollY;
+          this.gridScrollManager.setScrollPosition(scrollX, scrollY);
         },
         limitScrollPosition: () => {
-          this.limitScrollPosition();
+          this.gridScrollManager.limitScrollPosition();
         },
         render: () => {
           this.render();
@@ -243,10 +242,10 @@ export class Grid {
           this.updateSelectionDependentUi();
         },
         updateScrollBars: () => {
-          this.updateScrollBars();
+          this.gridScrollManager.updateScrollBars();
         },
         updateCellEditorPosition: () => {
-          this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+          this.gridScrollManager.updateCellEditorPosition();
         },
         savePersistedState: () => {
           void this.persistenceManager.savePersistedState();
@@ -262,19 +261,19 @@ export class Grid {
         void this.persistenceManager.savePersistedState();
       },
       limitScrollPosition: () => {
-        this.limitScrollPosition();
+        this.gridScrollManager.limitScrollPosition();
       },
       render: () => {
         this.render();
       },
       updateCellEditorPosition: () => {
-        this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
+        this.gridScrollManager.updateCellEditorPosition();
       },
       updateSelectionDependentUi: () => {
         this.updateSelectionDependentUi();
       },
       updateScrollBars: () => {
-        this.updateScrollBars();
+        this.gridScrollManager.updateScrollBars();
       }
     });
 
@@ -296,24 +295,6 @@ export class Grid {
         extendSelectedRange: (rowDelta: number, columnDelta: number) => {
           this.extendSelectedRange(rowDelta, columnDelta);
         }
-      }
-    );
-
-    this.scrollBarService = new ScrollBarService(
-      {
-        horizontalTrack: document.getElementById("horizontalScrollbar"),
-        horizontalThumb: document.getElementById("horizontalScrollThumb"),
-        verticalTrack: document.getElementById("verticalScrollbar"),
-        verticalThumb: document.getElementById("verticalScrollThumb")
-      },
-      (scrollX: number, scrollY: number) => {
-        this.scrollX = scrollX;
-        this.scrollY = scrollY;
-
-        this.limitScrollPosition();
-        this.render();
-        this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-        this.updateScrollBars();
       }
     );
 
@@ -347,15 +328,13 @@ export class Grid {
       }
     );
 
-    this.renderer = new GridRenderer(this.canvas, this.dataStore);
-
     this.initializeCanvas();
     this.loadData();
     void this.persistenceManager.loadPersistedState();
     this.attachEvents();
 
     this.render();
-    this.updateScrollBars();
+    this.gridScrollManager.updateScrollBars();
 
     this.formulaBarService.updateForSelection(
       this.selectionService.getSelection()
@@ -367,10 +346,10 @@ export class Grid {
 
     window.addEventListener("resize", () => {
       this.resizeCanvas();
-      this.limitScrollPosition();
+      this.gridScrollManager.limitScrollPosition();
       this.render();
-      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-      this.updateScrollBars();
+      this.gridScrollManager.updateCellEditorPosition();
+      this.gridScrollManager.updateScrollBars();
     });
   }
 
@@ -405,7 +384,7 @@ export class Grid {
   private attachEvents(): void {
     this.mouseHandler.attach();
     this.keyboardHandler.attach();
-    this.scrollBarService.attach();
+    this.gridScrollManager.attach();
 
     this.formulaBarService.attach({
       onFormulaCommit: (value: string) => {
@@ -468,15 +447,7 @@ export class Grid {
   }
 
   private handleWheel(event: WheelEvent): void {
-    event.preventDefault();
-
-    this.scrollX += event.deltaX;
-    this.scrollY += event.deltaY;
-
-    this.limitScrollPosition();
-    this.render();
-    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-    this.updateScrollBars();
+    this.gridScrollManager.handleWheel(event);
   }
 
   private async handleGlobalKeyDown(event: KeyboardEvent): Promise<void> {
@@ -517,7 +488,7 @@ export class Grid {
       this.statusBarService.reset();
       this.formulaBarService.clear();
       this.render();
-      this.updateScrollBars();
+      this.gridScrollManager.updateScrollBars();
       return;
     }
 
@@ -553,19 +524,19 @@ export class Grid {
 
     if (this.resizeService.isColumnResizeActive()) {
       this.resizeService.updateColumnResize(mouseX);
-      this.limitScrollPosition();
+      this.gridScrollManager.limitScrollPosition();
       this.render();
-      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-      this.updateScrollBars();
+      this.gridScrollManager.updateCellEditorPosition();
+      this.gridScrollManager.updateScrollBars();
       return;
     }
 
     if (this.resizeService.isRowResizeActive()) {
       this.resizeService.updateRowResize(mouseY);
-      this.limitScrollPosition();
+      this.gridScrollManager.limitScrollPosition();
       this.render();
-      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-      this.updateScrollBars();
+      this.gridScrollManager.updateCellEditorPosition();
+      this.gridScrollManager.updateScrollBars();
       return;
     }
 
@@ -591,10 +562,10 @@ export class Grid {
       void this.persistenceManager.savePersistedState();
 
       this.canvas.style.cursor = "default";
-      this.limitScrollPosition();
+      this.gridScrollManager.limitScrollPosition();
       this.render();
-      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-      this.updateScrollBars();
+      this.gridScrollManager.updateCellEditorPosition();
+      this.gridScrollManager.updateScrollBars();
       return;
     }
 
@@ -603,10 +574,10 @@ export class Grid {
       void this.persistenceManager.savePersistedState();
 
       this.canvas.style.cursor = "default";
-      this.limitScrollPosition();
+      this.gridScrollManager.limitScrollPosition();
       this.render();
-      this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-      this.updateScrollBars();
+      this.gridScrollManager.updateCellEditorPosition();
+      this.gridScrollManager.updateScrollBars();
       return;
     }
 
@@ -618,30 +589,31 @@ export class Grid {
   }
 
   private getColumnResizeIndex(mouseX: number, mouseY: number): number | null {
+    const { scrollX } = this.gridScrollManager.getScrollPosition();
+
     return this.coordinateService.getColumnResizeIndex(
       mouseX,
       mouseY,
-      this.scrollX
+      scrollX
     );
   }
 
   private getRowResizeIndex(mouseX: number, mouseY: number): number | null {
-    return this.coordinateService.getRowResizeIndex(
-      mouseX,
-      mouseY,
-      this.scrollY
-    );
+    const { scrollY } = this.gridScrollManager.getScrollPosition();
+
+    return this.coordinateService.getRowResizeIndex(mouseX, mouseY, scrollY);
   }
 
   private getColumnIndexFromMouseX(mouseX: number): number | null {
-    return this.coordinateService.getColumnIndexFromMouseX(
-      mouseX,
-      this.scrollX
-    );
+    const { scrollX } = this.gridScrollManager.getScrollPosition();
+
+    return this.coordinateService.getColumnIndexFromMouseX(mouseX, scrollX);
   }
 
   private getRowIndexFromMouseY(mouseY: number): number | null {
-    return this.coordinateService.getRowIndexFromMouseY(mouseY, this.scrollY);
+    const { scrollY } = this.gridScrollManager.getScrollPosition();
+
+    return this.coordinateService.getRowIndexFromMouseY(mouseY, scrollY);
   }
 
   private getCellPositionFromMouse(
@@ -689,51 +661,61 @@ export class Grid {
     this.updateSelectionDependentUi();
     this.render();
 
+    const { scrollX, scrollY } = this.gridScrollManager.getScrollPosition();
+
     this.cellEditorService.show(
       cellPosition.rowIndex,
       cellPosition.columnIndex,
-      this.scrollX,
-      this.scrollY
+      scrollX,
+      scrollY
     );
 
-    this.updateScrollBars();
+    this.gridScrollManager.updateScrollBars();
   }
 
   private moveSelectedCell(rowDelta: number, columnDelta: number): void {
+    const currentScroll = this.gridScrollManager.getScrollPosition();
+
     const navigationResult = this.keyboardNavigationService.moveSelectedCell(
       rowDelta,
       columnDelta,
-      this.scrollX,
-      this.scrollY
+      currentScroll.scrollX,
+      currentScroll.scrollY
     );
 
-    this.scrollX = navigationResult.scrollX;
-    this.scrollY = navigationResult.scrollY;
+    this.gridScrollManager.setScrollPosition(
+      navigationResult.scrollX,
+      navigationResult.scrollY
+    );
 
-    this.limitScrollPosition();
+    this.gridScrollManager.limitScrollPosition();
     this.updateSelectionDependentUi();
 
     this.render();
-    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-    this.updateScrollBars();
+    this.gridScrollManager.updateCellEditorPosition();
+    this.gridScrollManager.updateScrollBars();
   }
 
   private extendSelectedRange(rowDelta: number, columnDelta: number): void {
+    const currentScroll = this.gridScrollManager.getScrollPosition();
+
     const navigationResult = this.keyboardNavigationService.extendSelectedRange(
       rowDelta,
       columnDelta,
-      this.scrollX,
-      this.scrollY
+      currentScroll.scrollX,
+      currentScroll.scrollY
     );
 
-    this.scrollX = navigationResult.scrollX;
-    this.scrollY = navigationResult.scrollY;
+    this.gridScrollManager.setScrollPosition(
+      navigationResult.scrollX,
+      navigationResult.scrollY
+    );
 
-    this.limitScrollPosition();
+    this.gridScrollManager.limitScrollPosition();
 
     this.render();
-    this.cellEditorService.updatePosition(this.scrollX, this.scrollY);
-    this.updateScrollBars();
+    this.gridScrollManager.updateCellEditorPosition();
+    this.gridScrollManager.updateScrollBars();
 
     this.scheduleSelectionDependentUiUpdate();
   }
@@ -788,7 +770,7 @@ export class Grid {
     this.render();
 
     this.updateSelectionDependentUi();
-    this.updateScrollBars();
+    this.gridScrollManager.updateScrollBars();
   }
 
   private commitCellEditor(): void {
@@ -826,61 +808,10 @@ export class Grid {
     this.formulaBarService.updateForSelection(selection);
   }
 
-  private getTotalColumnsWidth(): number {
-    return this.coordinateService.getTotalColumnsWidth();
-  }
-
-  private getTotalRowsHeight(): number {
-    return this.coordinateService.getTotalRowsHeight();
-  }
-
-  private limitScrollPosition(): void {
-    const maxScrollX = Math.max(
-      0,
-      this.getTotalColumnsWidth() -
-        this.canvas.clientWidth +
-        GridConfig.rowHeaderWidth
-    );
-
-    const maxScrollY = Math.max(
-      0,
-      this.getTotalRowsHeight() -
-        this.canvas.clientHeight +
-        GridConfig.columnHeaderHeight
-    );
-
-    this.scrollX = Math.max(0, Math.min(this.scrollX, maxScrollX));
-    this.scrollY = Math.max(0, Math.min(this.scrollY, maxScrollY));
-  }
-
-  private updateScrollBars(): void {
-    const maxScrollX = Math.max(
-      0,
-      this.getTotalColumnsWidth() -
-        this.canvas.clientWidth +
-        GridConfig.rowHeaderWidth
-    );
-
-    const maxScrollY = Math.max(
-      0,
-      this.getTotalRowsHeight() -
-        this.canvas.clientHeight +
-        GridConfig.columnHeaderHeight
-    );
-
-    this.scrollBarService.update({
-      scrollX: this.scrollX,
-      scrollY: this.scrollY,
-      maxScrollX,
-      maxScrollY,
-      viewportWidth: this.canvas.clientWidth,
-      viewportHeight: this.canvas.clientHeight
-    });
-  }
-
   private render(): void {
     const selection = this.selectionService.getSelection();
+    const { scrollX, scrollY } = this.gridScrollManager.getScrollPosition();
 
-    this.renderer.render(this.scrollX, this.scrollY, selection);
+    this.renderer.render(scrollX, scrollY, selection);
   }
 }
