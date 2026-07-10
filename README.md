@@ -1,28 +1,25 @@
-# Excel Grid View
+# Excel Grid
 
-Excel Grid View is a TypeScript-based Excel-like grid application built using HTML Canvas, HTML, and CSS.  
-The project is designed to handle a large spreadsheet-style grid efficiently using virtual rendering and Object-Oriented Programming principles.
-
----
-
-## Description
-
-This project renders an Excel-style grid on an HTML canvas instead of using a normal HTML table.  
-Canvas rendering is used because the grid needs to support a very large number of rows and columns.
-
-The grid is designed to support:
-
-- Excel-like row and column headers
-- Cell selection
-- Row selection
-- Column selection
-- Cell range selection
-- Future support for editing, resizing, statistics, and undo/redo
-
-The project follows an Object-Oriented structure where each class has a clear responsibility.
+A high-performance, canvas-based Excel-like grid built with TypeScript. The project supports large datasets, spreadsheet-style selection, editing, formulas, undo/redo, persistence, JSON import/export, and virtual rendering.
 
 ---
 
+## Objective
+
+The objective of this project is to build an Excel-like grid that can handle large numbers of rows and columns efficiently while keeping the codebase clean, modular, and maintainable.
+
+The application demonstrates:
+
+- Canvas-based virtual rendering
+- Sparse data storage
+- Cell editing and formula support
+- Mouse and keyboard interactions
+- Undo/redo using command pattern
+- IndexedDB persistence
+- JSON import/export
+- Manager-based architecture
+
+---
 ## Tech Stack
 
 - TypeScript
@@ -33,133 +30,58 @@ The project follows an Object-Oriented structure where each class has a clear re
 
 ---
 
-## Features Implemented
+## How to Install and Run
 
-### Completed
+### Prerequisites
 
-- Project setup using Vite and TypeScript
-- Basic HTML and CSS layout
-- Canvas-based grid rendering
-- Excel-like column headers such as A, B, C, ..., Z, AA
-- Excel-like row headers such as 1, 2, 3, ...
-- 1,00,000 rows configured
-- 500 columns configured
-- Optimized data storage using
-- Generated 50,000 JSON employee records
-- Loaded JSON data into the first five columns
-- Virtual rendering for better performance
-- Basic vertical and horizontal scrolling
-- Cell selection
-- Selected cell display in the status bar
-- Row selection
-- Column selection
-- Cell range selection by dragging
-- Status bar updates for selected cell, row, column, and range
+Make sure the following are installed:
 
----
-
-## Features Pending
-
-The following features are planned for upcoming phases:
-
-- Cell editing using an HTML input overlay
-- Command Pattern implementation
-- Undo and redo support
-- Column resizing
-- Row resizing
-- Statistics calculation for selected numeric cells:
-  - Count
-  - Min
-  - Max
-  - Sum
-  - Average
-- Keyboard navigation
-- Delete selected cell content
-- Separate mouse and keyboard event handler classes
-
----
-
-## Project Structure
-
-```text
-
-ExcelGrid/
-├── index.html
-├── package.json
-├── tsconfig.json
-├── README.md
-├── src/
-│   ├── main.ts
-│   ├── style.css
-│   ├── core/
-│   │   ├── Grid.ts
-│   │   ├── GridConfig.ts
-│   │   ├── GridDataStore.ts
-│   │   └── GridRenderer.ts
-│   ├── models/
-│   │   └── Selection.ts
-│   ├── services/
-│   │   ├── DataGenerator.ts
-│   │   └── SelectionService.ts
-│   └── utils/
-│       └── CanvasUtils.ts
+```bash
+node --version
+npm --version
 ```
 
----
+Recommended:
 
-## Setup Instructions
+```text
+Node.js 18+
+npm 9+
+```
 
-### 1. Clone the Repository
+### Installation
+
+Clone the repository:
 
 ```bash
 git clone https://github.com/smit2870/ExcelGrid.git
-```
-
-### 2. Move Into Project Folder
-
-```bash
 cd ExcelGrid
 ```
 
-### 3. Install Dependencies
+### Install Dependencies
 
 ```bash
 npm install
 ```
 
----
-
-## Run the Project
-
-Start the development server:
+### Run Development Server
 
 ```bash
 npm run dev
 ```
 
-After running the command, open the local URL shown in the terminal.
+Open the local Vite URL shown in the terminal, usually:
 
-Example:
-
-```http
+```text
 http://localhost:5173/
 ```
 
----
-
-## Build the Project
-
-To create a production build:
+### Build
 
 ```bash
 npm run build
 ```
 
----
-
-## Preview Production Build
-
-To preview the production build locally:
+### Preview Production Build
 
 ```bash
 npm run preview
@@ -167,18 +89,228 @@ npm run preview
 
 ---
 
+## Features Implemented
 
-## Important Implementation Concepts
+### Grid and Rendering
 
-### Canvas Rendering
+- Canvas-based grid rendering
+- Virtual rendering of visible rows and columns only
+- Large grid support
+- Row headers and column headers
+- Custom row heights
+- Custom column widths
+- Centralized visual styles through `GridConfig`
 
-The grid is rendered using a single HTML canvas element.
+### Selection
 
-Instead of creating thousands of HTML elements, the application manually draws:
+- Single-cell selection
+- Range selection
+- Row selection
+- Column selection
+- Select all with `Ctrl + A`
+- Mouse drag range selection
+- Auto-scroll while selecting with mouse
+- Keyboard selection with arrow keys and `Shift + Arrow`
 
-- Cell backgrounds
-- Grid lines
-- Row headers
-- Column headers
-- Cell values
-- Selection highlights
+### Editing
+
+- Double-click cell editing
+- `Enter` to start editing
+- `Enter` to commit editing
+- `Escape` to cancel editing
+- `Alt + Enter` for multiline editing
+- Formula bar editing
+- Name box navigation
+
+### Formula Support
+
+Supported formulas include:
+
+```text
+=A1+B1
+=A1-B1
+=A1*B1
+=A1/B1
+=SUM(A1:A10)
+=AVG(A1:A10)
+=MIN(A1:A10)
+=MAX(A1:A10)
+=COUNT(A1:A10)
+```
+
+Formula behavior:
+
+- Raw formula is stored in the cell
+- Calculated value is displayed in the grid
+- Formula bar shows raw formula text
+- Status bar uses calculated formula values
+
+### Clipboard
+
+- Copy selected cells
+- Cut selected cells
+- Paste tabular data
+- Delete selected cells
+- Formula cells copy raw formula values
+
+### Undo / Redo
+
+- Undo and redo cell edits
+- Undo and redo clear/delete operations
+- Undo and redo paste operations
+- Undo and redo row resize operations
+- Undo and redo column resize operations
+
+### Persistence and Import/Export
+
+- IndexedDB persistence
+- Cell values persist after refresh
+- Formula values persist after refresh
+- Row heights persist after refresh
+- Column widths persist after refresh
+- JSON export
+- JSON import
+- Clear saved data action
+
+---
+
+## Project Structure
+
+```text
+ExcelGrid/
+│
+├── docs/
+│   ├── Architecture.md
+│   ├── OOPsPrinciples.md
+│   ├── Summary.md
+│   └── Testing.md
+├── src/
+│   ├── commands/
+│   │   ├── CommandManager.ts
+│   │   ├── ICommand.ts
+│   │   ├── EditCellCommand.ts
+│   │   ├── ClearCellsCommand.ts
+│   │   ├── PasteCellsCommand.ts
+│   │   ├── ResizeColumnCommand.ts
+│   │   └── ResizeRowCommand.ts
+│   ├── core/
+│   │   ├── Grid.ts
+│   │   ├── GridConfig.ts
+│   │   ├── GridDataStore.ts
+│   │   └── GridRenderer.ts
+│   ├── events/
+│   │   ├── KeyboardHandler.ts
+│   │   └── MouseHandler.ts
+│   ├── managers/
+│   │   ├── CellEditingManager.ts
+│   │   ├── ClipboardManager.ts
+│   │   ├── GridScrollManager.ts
+│   │   ├── KeyboardManager.ts
+│   │   ├── MouseInteractionManager.ts
+│   │   ├── PersistenceManager.ts
+│   │   ├── SelectionManager.ts
+│   │   └── UndoRedoManager.ts
+│   ├── models/
+│   │   └── Selection.ts
+│   ├── services/
+│   │   ├── CellEditorService.ts
+│   │   ├── ClipboardService.ts
+│   │   ├── CoordinateService.ts
+│   │   ├── DataGenerator.ts
+│   │   ├── FormulaBarService.ts
+│   │   ├── FormulaService.ts
+│   │   ├── ImportExportService.ts
+│   │   ├── KeyboardNavigationService.ts
+│   │   ├── PersistenceService.ts
+│   │   ├── ResizeService.ts
+│   │   ├── ScrollBarService.ts
+│   │   ├── SelectionService.ts
+│   │   ├── SelectionStatisticsService.ts
+│   │   └── StatusBarService.ts
+│   ├── utils/
+│   │   └── CanvasUtils.ts
+│   ├── main.ts
+│   └── style.css
+├── index.html
+├── package.json
+├── tsconfig.json
+├── README.md
+└── .gitignore
+```
+
+---
+
+## Documentation
+
+Additional documentation is available in the `docs` folder.
+
+### Project Summary
+
+```text
+docs/Summary.md
+```
+
+Contains a high-level summary of completed features, refactoring work, persistence support, formula support, and future improvements.
+
+### Architecture Notes
+
+```text
+docs/Architecture.md
+```
+
+Explains class responsibilities, data storage approach, virtual rendering, command pattern usage, selection model, and summary calculations.
+
+### OOP and SOLID Design Notes
+
+```text
+docs/OOPsPrinciples.md
+```
+
+Explains how object-oriented programming concepts and SOLID principles are applied in this project.
+
+### Testing Expectations
+
+```text
+docs/Testing.md
+```
+
+Contains 40 executable manual test scenarios covering editing, resizing, selection, summary calculation, data loading, performance, keyboard behavior, formula behavior, persistence, import/export, and error handling.
+
+---
+
+## Performance Notes
+
+- The grid uses virtual rendering and only draws visible rows and columns.
+- Cell data is stored sparsely, so empty cells are not stored.
+- Keyboard navigation rendering is optimized with `requestAnimationFrame`.
+- Summary calculations are incremental and avoid large array spreading.
+- Selection status updates are debounced during large or repeated selection changes.
+
+---
+
+## Known Limitations
+
+- Formula support currently covers basic arithmetic and simple aggregate functions only.
+- Formula copy/paste preserves raw formulas but does not yet adjust references relatively.
+- Undo/redo history is session-based and is not persisted after refresh.
+- IndexedDB persistence currently stores the current grid state, not command history.
+
+---
+
+## Suggested Future Improvements
+
+- Relative formula paste
+- More formulas such as `IF`, `ROUND`, `ABS`, `CONCAT`, `LEFT`, and `RIGHT`
+- Sorting and filtering
+- Freeze rows/columns
+- Auto-fit rows and columns
+- Fill handle
+- Cell formatting
+- Number formatting
+- Context menu
+- Debounced or incremental IndexedDB saves
+- Improved accessibility support
+
+---
+
+The project is structured to be extensible, testable, and ready for future spreadsheet features.
