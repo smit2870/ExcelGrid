@@ -57,11 +57,13 @@ export class Grid {
   private formulaBar: HTMLTextAreaElement | null;
 
   private selectionUiUpdateTimer: number | null;
+  private navigationRenderFrameId: number | null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
 
     this.selectionUiUpdateTimer = null;
+    this.navigationRenderFrameId = null;
 
     this.statusBar = document.getElementById("statusBar");
 
@@ -509,11 +511,9 @@ export class Grid {
     );
 
     this.gridScrollManager.limitScrollPosition();
-    this.updateSelectionDependentUi();
 
-    this.render();
-    this.gridScrollManager.updateCellEditorPosition();
-    this.gridScrollManager.updateScrollBars();
+    this.scheduleSelectionDependentUiUpdate();
+    this.scheduleNavigationRender();
   }
 
   private extendSelectedRange(rowDelta: number, columnDelta: number): void {
@@ -533,11 +533,8 @@ export class Grid {
 
     this.gridScrollManager.limitScrollPosition();
 
-    this.render();
-    this.gridScrollManager.updateCellEditorPosition();
-    this.gridScrollManager.updateScrollBars();
-
     this.scheduleSelectionDependentUiUpdate();
+    this.scheduleNavigationRender();
   }
 
   private commitCellEditor(): void {
@@ -566,6 +563,20 @@ export class Grid {
     }
 
     this.updateSelectionDependentUi();
+  }
+
+  private scheduleNavigationRender(): void {
+    if (this.navigationRenderFrameId !== null) {
+      return;
+    }
+
+    this.navigationRenderFrameId = window.requestAnimationFrame(() => {
+      this.navigationRenderFrameId = null;
+
+      this.render();
+      this.gridScrollManager.updateCellEditorPosition();
+      this.gridScrollManager.updateScrollBars();
+    });
   }
 
   private updateSelectionDependentUi(): void {
