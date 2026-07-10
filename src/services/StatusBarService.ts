@@ -28,32 +28,33 @@ export class StatusBarService {
       return;
     }
 
-    const values = this.getSelectedDisplayValues(selection);
-    const numericValues = values
-      .map((value) => this.toNumber(value))
-      .filter((value): value is number => value !== null);
+    const stats = this.calculateStatsForSelection(selection);
 
-    const count = numericValues.length;
-    const sum = numericValues.reduce((total, value) => total + value, 0);
-    const average = count === 0 ? null : sum / count;
-    const min = count === 0 ? null : Math.min(...numericValues);
-    const max = count === 0 ? null : Math.max(...numericValues);
+    const average = stats.count === 0 ? null : stats.sum / stats.count;
 
     this.statusBar.textContent =
-      `Count: ${count}` +
-      ` | Sum: ${this.formatNumber(sum)}` +
+      `Count: ${stats.count}` +
+      ` | Sum: ${this.formatNumber(stats.sum)}` +
       ` | Avg: ${average === null ? "-" : this.formatNumber(average)}` +
-      ` | Min: ${min === null ? "-" : this.formatNumber(min)}` +
-      ` | Max: ${max === null ? "-" : this.formatNumber(max)}`;
+      ` | Min: ${stats.min === null ? "-" : this.formatNumber(stats.min)}` +
+      ` | Max: ${stats.max === null ? "-" : this.formatNumber(stats.max)}`;
   }
 
-  private getSelectedDisplayValues(selection: Selection): CellValue[] {
-    const values: CellValue[] = [];
-
+  private calculateStatsForSelection(selection: Selection): {
+    count: number;
+    sum: number;
+    min: number | null;
+    max: number | null;
+  } {
     const startRow = Math.min(selection.startRow, selection.endRow);
     const endRow = Math.max(selection.startRow, selection.endRow);
     const startColumn = Math.min(selection.startColumn, selection.endColumn);
     const endColumn = Math.max(selection.startColumn, selection.endColumn);
+
+    let count = 0;
+    let sum = 0;
+    let min: number | null = null;
+    let max: number | null = null;
 
     this.dataStore.forEachCell((rowIndex, columnIndex) => {
       const isInsideSelection =
@@ -66,10 +67,35 @@ export class StatusBarService {
         return;
       }
 
-      values.push(this.dataStore.getCellDisplayValue(rowIndex, columnIndex));
+      const displayValue = this.dataStore.getCellDisplayValue(
+        rowIndex,
+        columnIndex
+      );
+
+      const numericValue = this.toNumber(displayValue);
+
+      if (numericValue === null) {
+        return;
+      }
+
+      count++;
+      sum += numericValue;
+
+      if (min === null || numericValue < min) {
+        min = numericValue;
+      }
+
+      if (max === null || numericValue > max) {
+        max = numericValue;
+      }
     });
 
-    return values;
+    return {
+      count,
+      sum,
+      min,
+      max
+    };
   }
 
   private toNumber(value: CellValue): number | null {
