@@ -1,162 +1,96 @@
-import type { GridDataStore } from "../core/GridDataStore";
+import type { GridDataStore, CellValue } from "../core/GridDataStore";
 import type { Selection } from "../models/Selection";
-import {
-    SelectionStatisticsService,
-    type SelectionStatistics
-} from "./SelectionStatisticsService";
-import { CanvasUtils } from "../utils/CanvasUtils";
 
 export class StatusBarService {
-    private statusBar: HTMLElement | null;
-    private dataStore: GridDataStore;
+  private statusBar: HTMLElement | null;
+  private dataStore: GridDataStore;
 
-    constructor(statusBar: HTMLElement | null, dataStore: GridDataStore) {
-        this.statusBar = statusBar;
-        this.dataStore = dataStore;
+  constructor(statusBar: HTMLElement | null, dataStore: GridDataStore) {
+    this.statusBar = statusBar;
+    this.dataStore = dataStore;
+  }
+
+  reset(): void {
+    if (!this.statusBar) {
+      return;
     }
 
-    updateForSelection(selection: Selection | null): void {
-        if (!selection) {
-            this.reset();
-            return;
-        }
+    this.statusBar.textContent = "Count: 0 | Sum: 0 | Avg: - | Min: - | Max: -";
+  }
 
-        if (selection.type === "cell") {
-            this.updateCell(selection.startRow, selection.startColumn, selection);
-            return;
-        }
-
-        if (selection.type === "row") {
-            this.updateRow(selection.startRow, selection);
-            return;
-        }
-
-        if (selection.type === "column") {
-            this.updateColumn(selection.startColumn, selection);
-            return;
-        }
-
-        if (selection.type === "range") {
-            this.updateRange(
-                selection.startRow,
-                selection.startColumn,
-                selection.endRow,
-                selection.endColumn,
-                selection
-            );
-        }
+  updateForSelection(selection: Selection | null): void {
+    if (!this.statusBar) {
+      return;
     }
 
-    updateCell(
-        rowIndex: number,
-        columnIndex: number,
-        selection: Selection | null
-    ): void {
-        if (!this.statusBar) {
-            return;
-        }
-
-        const statistics = SelectionStatisticsService.calculate(
-            selection,
-            this.dataStore
-        );
-
-        const columnName = CanvasUtils.getColumnName(columnIndex);
-        const rowNumber = rowIndex + 1;
-        const selectedCellName = `${columnName}${rowNumber}`;
-
-        this.statusBar.textContent = `Selected Cell: ${selectedCellName} | ${this.formatStatistics(
-            statistics
-        )}`;
+    if (!selection) {
+      this.reset();
+      return;
     }
 
-    updateRow(rowIndex: number, selection: Selection | null): void {
-        if (!this.statusBar) {
-            return;
-        }
+    const values = this.getSelectedDisplayValues(selection);
+    const numericValues = values
+      .map((value) => this.toNumber(value))
+      .filter((value): value is number => value !== null);
 
-        const statistics = SelectionStatisticsService.calculate(
-            selection,
-            this.dataStore
-        );
+    const count = numericValues.length;
+    const sum = numericValues.reduce((total, value) => total + value, 0);
+    const average = count === 0 ? null : sum / count;
+    const min = count === 0 ? null : Math.min(...numericValues);
+    const max = count === 0 ? null : Math.max(...numericValues);
 
-        const rowNumber = rowIndex + 1;
+    this.statusBar.textContent =
+      `Count: ${count}` +
+      ` | Sum: ${this.formatNumber(sum)}` +
+      ` | Avg: ${average === null ? "-" : this.formatNumber(average)}` +
+      ` | Min: ${min === null ? "-" : this.formatNumber(min)}` +
+      ` | Max: ${max === null ? "-" : this.formatNumber(max)}`;
+  }
 
-        this.statusBar.textContent = `Selected Row: ${rowNumber} | ${this.formatStatistics(
-            statistics
-        )}`;
+  private getSelectedDisplayValues(selection: Selection): CellValue[] {
+    const values: CellValue[] = [];
+
+    const startRow = Math.min(selection.startRow, selection.endRow);
+    const endRow = Math.max(selection.startRow, selection.endRow);
+    const startColumn = Math.min(selection.startColumn, selection.endColumn);
+    const endColumn = Math.max(selection.startColumn, selection.endColumn);
+
+    this.dataStore.forEachCell((rowIndex, columnIndex) => {
+      const isInsideSelection =
+        rowIndex >= startRow &&
+        rowIndex <= endRow &&
+        columnIndex >= startColumn &&
+        columnIndex <= endColumn;
+
+      if (!isInsideSelection) {
+        return;
+      }
+
+      values.push(this.dataStore.getCellDisplayValue(rowIndex, columnIndex));
+    });
+
+    return values;
+  }
+
+  private toNumber(value: CellValue): number | null {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
     }
 
-    updateColumn(columnIndex: number, selection: Selection | null): void {
-        if (!this.statusBar) {
-            return;
-        }
+    if (typeof value === "string") {
+      const numericValue = Number(value);
 
-        const statistics = SelectionStatisticsService.calculate(
-            selection,
-            this.dataStore
-        );
-
-        const columnName = CanvasUtils.getColumnName(columnIndex);
-
-        this.statusBar.textContent = `Selected Column: ${columnName} | ${this.formatStatistics(
-            statistics
-        )}`;
+      return Number.isNaN(numericValue) ? null : numericValue;
     }
 
-    updateRange(
-        startRow: number,
-        startColumn: number,
-        endRow: number,
-        endColumn: number,
-        selection: Selection | null
-    ): void {
-        if (!this.statusBar) {
-            return;
-        }
+    return null;
+  }
 
-        const normalizedStartRow = Math.min(startRow, endRow);
-        const normalizedEndRow = Math.max(startRow, endRow);
-        const normalizedStartColumn = Math.min(startColumn, endColumn);
-        const normalizedEndColumn = Math.max(startColumn, endColumn);
-
-        const startCellName = `${CanvasUtils.getColumnName(
-            normalizedStartColumn
-        )}${normalizedStartRow + 1}`;
-
-        const endCellName = `${CanvasUtils.getColumnName(
-            normalizedEndColumn
-        )}${normalizedEndRow + 1}`;
-
-        const statistics = SelectionStatisticsService.calculate(
-            selection,
-            this.dataStore
-        );
-
-        this.statusBar.textContent = `Selected Range: ${startCellName}:${endCellName} | ${this.formatStatistics(
-            statistics
-        )}`;
+  private formatNumber(value: number): string {
+    if (Number.isInteger(value)) {
+      return String(value);
     }
 
-    reset(): void {
-        if (!this.statusBar) {
-            return;
-        }
-
-        this.statusBar.textContent = this.formatStatistics({
-            count: 0,
-            sum: 0,
-            average: 0,
-            min: null,
-            max: null
-        });
-    }
-
-    private formatStatistics(statistics: SelectionStatistics): string {
-        const average =
-            statistics.count === 0 ? "-" : Number(statistics.average.toFixed(2));
-
-        return `Count: ${statistics.count} | Sum: ${statistics.sum} | Avg: ${average} | Min: ${statistics.min ?? "-"
-            } | Max: ${statistics.max ?? "-"}`;
-    }
+    return value.toFixed(2);
+  }
 }

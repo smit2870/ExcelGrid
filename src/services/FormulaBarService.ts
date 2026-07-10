@@ -151,9 +151,9 @@ export class FormulaBarService {
     const rowIndex = selection.startRow;
     const columnIndex = selection.startColumn;
 
-    const value = this.dataStore.getCellValue(rowIndex, columnIndex);
+    const rawValue = this.dataStore.getCellRawValue(rowIndex, columnIndex);
 
-    this.formulaBar.value = value === null ? "" : String(value);
+    this.formulaBar.value = rawValue === null ? "" : String(rawValue);
   }
 
   private insertNewLineAtCursor(): void {

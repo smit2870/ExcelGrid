@@ -94,7 +94,7 @@ export class CellEditingManager {
     const rowIndex = selection.startRow;
     const columnIndex = selection.startColumn;
 
-    const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
+    const oldValue = this.dataStore.getCellRawValue(rowIndex, columnIndex);
     const newValue = this.parseCellValue(value);
 
     const isSameValue = String(oldValue ?? "") === String(newValue ?? "");
@@ -151,7 +151,7 @@ export class CellEditingManager {
     const rowIndex = editingCell.rowIndex;
     const columnIndex = editingCell.columnIndex;
 
-    const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
+    const oldValue = this.dataStore.getCellRawValue(rowIndex, columnIndex);
     const editorValue = this.cellEditorService.getValue().trim();
 
     const newValue = this.parseCellValue(editorValue);

@@ -44,10 +44,7 @@ export class ClipboardManager {
       return;
     }
 
-    const clipboardText = this.clipboardService.copySelection(
-      selection,
-      this.dataStore
-    );
+    const clipboardText = this.copySelectionAsRawText(selection);
 
     if (clipboardText === "") {
       return;
@@ -67,10 +64,7 @@ export class ClipboardManager {
       return;
     }
 
-    const clipboardText = this.clipboardService.copySelection(
-      selection,
-      this.dataStore
-    );
+    const clipboardText = this.copySelectionAsRawText(selection);
 
     try {
       await navigator.clipboard.writeText(clipboardText);
@@ -123,7 +117,7 @@ export class ClipboardManager {
           continue;
         }
 
-        const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
+        const oldValue = this.dataStore.getCellRawValue(rowIndex, columnIndex);
 
         const newValue = this.clipboardService.convertTextToCellValue(
           row[columnOffset]
@@ -202,7 +196,7 @@ export class ClipboardManager {
         columnIndex <= endColumn;
         columnIndex++
       ) {
-        const oldValue = this.dataStore.getCellValue(rowIndex, columnIndex);
+        const oldValue = this.dataStore.getCellRawValue(rowIndex, columnIndex);
 
         if (oldValue === null) {
           continue;
@@ -228,5 +222,37 @@ export class ClipboardManager {
     this.callbacks.render();
     this.callbacks.updateSelectionDependentUi();
     this.callbacks.updateScrollBars();
+  }
+
+  private copySelectionAsRawText(selection: {
+    startRow: number;
+    endRow: number;
+    startColumn: number;
+    endColumn: number;
+  }): string {
+    const startRow = Math.min(selection.startRow, selection.endRow);
+    const endRow = Math.max(selection.startRow, selection.endRow);
+    const startColumn = Math.min(selection.startColumn, selection.endColumn);
+    const endColumn = Math.max(selection.startColumn, selection.endColumn);
+
+    const rows: string[] = [];
+
+    for (let rowIndex = startRow; rowIndex <= endRow; rowIndex++) {
+      const values: string[] = [];
+
+      for (
+        let columnIndex = startColumn;
+        columnIndex <= endColumn;
+        columnIndex++
+      ) {
+        const rawValue = this.dataStore.getCellRawValue(rowIndex, columnIndex);
+
+        values.push(rawValue === null ? "" : String(rawValue));
+      }
+
+      rows.push(values.join("\t"));
+    }
+
+    return rows.join("\n");
   }
 }

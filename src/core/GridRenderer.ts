@@ -1,24 +1,12 @@
 import { GridConfig } from "./GridConfig";
 import type { GridDataStore } from "./GridDataStore";
-import { CanvasUtils } from "../utils/CanvasUtils";
 import type { Selection } from "../models/Selection";
-
-interface VisibleColumn {
-  columnIndex: number;
-  x: number;
-  width: number;
-}
-
-interface VisibleRow {
-  rowIndex: number;
-  y: number;
-  height: number;
-}
+import { CanvasUtils } from "../utils/CanvasUtils";
 
 export class GridRenderer {
   private canvas: HTMLCanvasElement;
-  private dataStore: GridDataStore;
   private context: CanvasRenderingContext2D;
+  private dataStore: GridDataStore;
 
   constructor(canvas: HTMLCanvasElement, dataStore: GridDataStore) {
     this.canvas = canvas;
@@ -27,7 +15,7 @@ export class GridRenderer {
     const context = this.canvas.getContext("2d");
 
     if (!context) {
-      throw new Error("Canvas 2D context is not supported.");
+      throw new Error("Canvas 2D context is not available.");
     }
 
     this.context = context;
@@ -36,13 +24,9 @@ export class GridRenderer {
   render(scrollX: number, scrollY: number, selection: Selection | null): void {
     this.clearCanvas();
 
-    this.drawBackground();
-    this.drawCells(scrollX, scrollY);
-    this.drawGridLines(scrollX, scrollY);
+    this.drawGrid(scrollX, scrollY);
+    this.drawHeaders(scrollX, scrollY, selection);
     this.drawSelection(scrollX, scrollY, selection);
-    this.drawColumnHeaders(scrollX, selection);
-    this.drawRowHeaders(scrollY, selection);
-    this.drawTopLeftCorner();
   }
 
   private clearCanvas(): void {
@@ -52,11 +36,8 @@ export class GridRenderer {
       this.canvas.clientWidth,
       this.canvas.clientHeight
     );
-  }
 
-  private drawBackground(): void {
     this.context.fillStyle = GridConfig.backgroundColor;
-
     this.context.fillRect(
       0,
       0,
@@ -65,128 +46,75 @@ export class GridRenderer {
     );
   }
 
-  private getVisibleColumns(scrollX: number): VisibleColumn[] {
-    const visibleColumns: VisibleColumn[] = [];
+  private drawGrid(scrollX: number, scrollY: number): void {
+    const visibleColumns = this.getVisibleColumns(scrollX);
+    const visibleRows = this.getVisibleRows(scrollY);
 
-    let currentX = GridConfig.rowHeaderWidth - scrollX;
+    this.context.font = GridConfig.font;
+    this.context.textBaseline = "middle";
+    this.context.textAlign = "left";
 
-    for (
-      let columnIndex = 0;
-      columnIndex < GridConfig.totalColumns;
-      columnIndex++
-    ) {
-      const width = this.dataStore.getColumnWidth(columnIndex);
-
-      const isVisible =
-        currentX + width >= GridConfig.rowHeaderWidth &&
-        currentX <= this.canvas.clientWidth;
-
-      if (isVisible) {
-        visibleColumns.push({
-          columnIndex,
-          x: currentX,
-          width
-        });
-      }
-
-      currentX += width;
-
-      if (currentX > this.canvas.clientWidth) {
-        break;
+    for (const column of visibleColumns) {
+      for (const row of visibleRows) {
+        this.drawCell(
+          row.rowIndex,
+          column.columnIndex,
+          column.x,
+          row.y,
+          column.width,
+          row.height
+        );
       }
     }
-
-    return visibleColumns;
   }
 
-  private getVisibleRows(scrollY: number): VisibleRow[] {
-    const visibleRows: VisibleRow[] = [];
-
-    let currentY = GridConfig.columnHeaderHeight - scrollY;
-
-    for (let rowIndex = 0; rowIndex < GridConfig.totalRows; rowIndex++) {
-      const height = this.dataStore.getRowHeight(rowIndex);
-
-      const isVisible =
-        currentY + height >= GridConfig.columnHeaderHeight &&
-        currentY <= this.canvas.clientHeight;
-
-      if (isVisible) {
-        visibleRows.push({
-          rowIndex,
-          y: currentY,
-          height
-        });
-      }
-
-      currentY += height;
-
-      if (currentY > this.canvas.clientHeight) {
-        break;
-      }
-    }
-
-    return visibleRows;
-  }
-
-  private getColumnBounds(
-    columnIndex: number,
-    scrollX: number
-  ): { x: number; width: number } | null {
-    if (columnIndex < 0 || columnIndex >= GridConfig.totalColumns) {
-      return null;
-    }
-
-    let x = GridConfig.rowHeaderWidth - scrollX;
-
-    for (let index = 0; index < columnIndex; index++) {
-      x += this.dataStore.getColumnWidth(index);
-    }
-
-    return {
-      x,
-      width: this.dataStore.getColumnWidth(columnIndex)
-    };
-  }
-
-  private getRowBounds(
+  private drawCell(
     rowIndex: number,
-    scrollY: number
-  ): { y: number; height: number } | null {
-    if (rowIndex < 0 || rowIndex >= GridConfig.totalRows) {
-      return null;
-    }
-
-    let y = GridConfig.columnHeaderHeight - scrollY;
-
-    for (let index = 0; index < rowIndex; index++) {
-      y += this.dataStore.getRowHeight(index);
-    }
-
-    return {
-      y,
-      height: this.dataStore.getRowHeight(rowIndex)
-    };
-  }
-
-  private drawTopLeftCorner(): void {
-    this.context.fillStyle = GridConfig.headerBackgroundColor;
-
-    this.context.fillRect(
-      0,
-      0,
-      GridConfig.rowHeaderWidth,
-      GridConfig.columnHeaderHeight
-    );
+    columnIndex: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): void {
+    this.context.fillStyle = GridConfig.backgroundColor;
+    this.context.fillRect(x, y, width, height);
 
     this.context.strokeStyle = GridConfig.gridLineColor;
+    this.context.lineWidth = 1;
+    this.context.strokeRect(x, y, width, height);
 
-    this.context.strokeRect(
-      0,
-      0,
-      GridConfig.rowHeaderWidth,
-      GridConfig.columnHeaderHeight
-    );
+    const value = this.dataStore.getCellDisplayValue(rowIndex, columnIndex);
+
+    if (value === null) {
+      return;
+    }
+
+    const text = String(value);
+
+    this.context.save();
+
+    this.context.beginPath();
+    this.context.rect(x + 1, y + 1, width - 2, height - 2);
+    this.context.clip();
+
+    this.context.fillStyle = GridConfig.cellTextColor;
+    this.context.font = GridConfig.font;
+    this.context.textAlign = "left";
+    this.context.textBaseline = "middle";
+
+    this.context.fillText(text, x + 6, y + height / 2);
+
+    this.context.restore();
+  }
+
+  private drawHeaders(
+    scrollX: number,
+    scrollY: number,
+    selection: Selection | null
+  ): void {
+    this.drawColumnHeaders(scrollX, selection);
+    this.drawRowHeaders(scrollY, selection);
+    this.drawTopLeftCorner();
   }
 
   private drawColumnHeaders(
@@ -194,10 +122,6 @@ export class GridRenderer {
     selection: Selection | null
   ): void {
     const visibleColumns = this.getVisibleColumns(scrollX);
-
-    this.context.font = GridConfig.headerFont;
-    this.context.textAlign = "center";
-    this.context.textBaseline = "middle";
 
     for (const column of visibleColumns) {
       const isSelected = this.isColumnSelected(column.columnIndex, selection);
@@ -214,7 +138,7 @@ export class GridRenderer {
       );
 
       this.context.strokeStyle = GridConfig.gridLineColor;
-
+      this.context.lineWidth = 1;
       this.context.strokeRect(
         column.x,
         0,
@@ -226,20 +150,22 @@ export class GridRenderer {
         ? GridConfig.selectedHeaderTextColor
         : GridConfig.headerTextColor;
 
+      this.context.font = GridConfig.headerFont;
+      this.context.textAlign = "center";
+      this.context.textBaseline = "middle";
+
       this.context.fillText(
         CanvasUtils.getColumnName(column.columnIndex),
         column.x + column.width / 2,
         GridConfig.columnHeaderHeight / 2
       );
     }
+
+    this.context.textAlign = "left";
   }
 
   private drawRowHeaders(scrollY: number, selection: Selection | null): void {
     const visibleRows = this.getVisibleRows(scrollY);
-
-    this.context.font = GridConfig.headerFont;
-    this.context.textAlign = "center";
-    this.context.textBaseline = "middle";
 
     for (const row of visibleRows) {
       const isSelected = this.isRowSelected(row.rowIndex, selection);
@@ -256,7 +182,7 @@ export class GridRenderer {
       );
 
       this.context.strokeStyle = GridConfig.gridLineColor;
-
+      this.context.lineWidth = 1;
       this.context.strokeRect(
         0,
         row.y,
@@ -268,121 +194,37 @@ export class GridRenderer {
         ? GridConfig.selectedHeaderTextColor
         : GridConfig.headerTextColor;
 
+      this.context.font = GridConfig.headerFont;
+      this.context.textAlign = "center";
+      this.context.textBaseline = "middle";
+
       this.context.fillText(
         String(row.rowIndex + 1),
         GridConfig.rowHeaderWidth / 2,
         row.y + row.height / 2
       );
     }
+
+    this.context.textAlign = "left";
   }
 
-  private drawCells(scrollX: number, scrollY: number): void {
-    const visibleColumns = this.getVisibleColumns(scrollX);
-    const visibleRows = this.getVisibleRows(scrollY);
-
-    this.context.font = GridConfig.font;
-    this.context.textBaseline = "middle";
-
-    for (const row of visibleRows) {
-      for (const column of visibleColumns) {
-        const value = this.dataStore.getCellValue(
-          row.rowIndex,
-          column.columnIndex
-        );
-
-        if (value !== null) {
-          this.context.save();
-
-          this.context.beginPath();
-          this.context.rect(
-            column.x + 1,
-            row.y + 1,
-            column.width - 2,
-            row.height - 2
-          );
-          this.context.clip();
-
-          this.context.fillStyle = GridConfig.cellTextColor;
-
-          this.drawCellText(
-            value,
-            column.x,
-            row.y,
-            column.width,
-            row.height
-          );
-
-          this.context.restore();
-        }
-      }
-    }
-  }
-
-  private drawCellText(
-    value: string | number,
-    x: number,
-    y: number,
-    width: number,
-    height: number
-  ): void {
-    const text = String(value);
-    const lines = text.split("\n");
-
-    const isNumber = typeof value === "number";
-    const lineHeight = 16;
-    const paddingX = 6;
-    const paddingY = 4;
-
-    this.context.textAlign = isNumber ? "right" : "left";
-
-    let textY = y + paddingY + lineHeight / 2;
-
-    for (const line of lines) {
-      if (textY > y + height - paddingY) {
-        break;
-      }
-
-      const textX = isNumber ? x + width - paddingX : x + paddingX;
-
-      this.context.fillText(line, textX, textY);
-
-      textY += lineHeight;
-    }
-  }
-
-  private drawGridLines(scrollX: number, scrollY: number): void {
-    const visibleColumns = this.getVisibleColumns(scrollX);
-    const visibleRows = this.getVisibleRows(scrollY);
+  private drawTopLeftCorner(): void {
+    this.context.fillStyle = GridConfig.headerBackgroundColor;
+    this.context.fillRect(
+      0,
+      0,
+      GridConfig.rowHeaderWidth,
+      GridConfig.columnHeaderHeight
+    );
 
     this.context.strokeStyle = GridConfig.gridLineColor;
     this.context.lineWidth = 1;
-
-    for (const row of visibleRows) {
-      this.context.beginPath();
-      this.context.moveTo(GridConfig.rowHeaderWidth, row.y);
-      this.context.lineTo(this.canvas.clientWidth, row.y);
-      this.context.stroke();
-
-      this.context.beginPath();
-      this.context.moveTo(GridConfig.rowHeaderWidth, row.y + row.height);
-      this.context.lineTo(this.canvas.clientWidth, row.y + row.height);
-      this.context.stroke();
-    }
-
-    for (const column of visibleColumns) {
-      this.context.beginPath();
-      this.context.moveTo(column.x, GridConfig.columnHeaderHeight);
-      this.context.lineTo(column.x, this.canvas.clientHeight);
-      this.context.stroke();
-
-      this.context.beginPath();
-      this.context.moveTo(
-        column.x + column.width,
-        GridConfig.columnHeaderHeight
-      );
-      this.context.lineTo(column.x + column.width, this.canvas.clientHeight);
-      this.context.stroke();
-    }
+    this.context.strokeRect(
+      0,
+      0,
+      GridConfig.rowHeaderWidth,
+      GridConfig.columnHeaderHeight
+    );
   }
 
   private drawSelection(
@@ -394,252 +236,53 @@ export class GridRenderer {
       return;
     }
 
-    if (selection.type === "cell") {
-      this.drawCellSelection(scrollX, scrollY, selection);
-      return;
-    }
-
-    if (selection.type === "row") {
-      this.drawRowSelection(scrollY, selection);
-      return;
-    }
-
-    if (selection.type === "column") {
-      this.drawColumnSelection(scrollX, selection);
-      return;
-    }
-
-    if (selection.type === "range") {
-      this.drawRangeSelection(scrollX, scrollY, selection);
-    }
-  }
-
-  private drawCellSelection(
-    scrollX: number,
-    scrollY: number,
-    selection: Selection
-  ): void {
-    const columnBounds = this.getColumnBounds(selection.startColumn, scrollX);
-    const rowBounds = this.getRowBounds(selection.startRow, scrollY);
-
-    if (!columnBounds || !rowBounds) {
-      return;
-    }
-
-    const isVisible =
-      columnBounds.x + columnBounds.width >= GridConfig.rowHeaderWidth &&
-      columnBounds.x <= this.canvas.clientWidth &&
-      rowBounds.y + rowBounds.height >= GridConfig.columnHeaderHeight &&
-      rowBounds.y <= this.canvas.clientHeight;
-
-    if (!isVisible) {
-      return;
-    }
-
-    this.context.fillStyle = GridConfig.selectedCellFillColor;
-
-    this.context.fillRect(
-      columnBounds.x,
-      rowBounds.y,
-      columnBounds.width,
-      rowBounds.height
-    );
-
-    this.drawActiveCellBorder(
-      columnBounds.x,
-      rowBounds.y,
-      columnBounds.width,
-      rowBounds.height
-    );
-  }
-
-  private drawRowSelection(scrollY: number, selection: Selection): void {
-    const rowBounds = this.getRowBounds(selection.startRow, scrollY);
-
-    if (!rowBounds) {
-      return;
-    }
-
-    const isVisible =
-      rowBounds.y + rowBounds.height >= GridConfig.columnHeaderHeight &&
-      rowBounds.y <= this.canvas.clientHeight;
-
-    if (!isVisible) {
-      return;
-    }
-
-    this.context.fillStyle = GridConfig.selectedCellFillColor;
-
-    this.context.fillRect(
-      GridConfig.rowHeaderWidth,
-      rowBounds.y,
-      this.canvas.clientWidth - GridConfig.rowHeaderWidth,
-      rowBounds.height
-    );
-
-    this.context.strokeStyle = GridConfig.rangeBorderColor;
-    this.context.lineWidth = GridConfig.rangeBorderWidth;
-
-    this.context.strokeRect(
-      GridConfig.rowHeaderWidth + 1,
-      rowBounds.y + 1,
-      this.canvas.clientWidth - GridConfig.rowHeaderWidth - 2,
-      rowBounds.height - 2
-    );
-
-    this.context.lineWidth = 1;
-  }
-
-  private drawColumnSelection(scrollX: number, selection: Selection): void {
-    const columnBounds = this.getColumnBounds(selection.startColumn, scrollX);
-
-    if (!columnBounds) {
-      return;
-    }
-
-    const isVisible =
-      columnBounds.x + columnBounds.width >= GridConfig.rowHeaderWidth &&
-      columnBounds.x <= this.canvas.clientWidth;
-
-    if (!isVisible) {
-      return;
-    }
-
-    this.context.fillStyle = GridConfig.selectedCellFillColor;
-
-    this.context.fillRect(
-      columnBounds.x,
-      GridConfig.columnHeaderHeight,
-      columnBounds.width,
-      this.canvas.clientHeight - GridConfig.columnHeaderHeight
-    );
-
-    this.context.strokeStyle = GridConfig.rangeBorderColor;
-    this.context.lineWidth = GridConfig.rangeBorderWidth;
-
-    this.context.strokeRect(
-      columnBounds.x + 1,
-      GridConfig.columnHeaderHeight + 1,
-      columnBounds.width - 2,
-      this.canvas.clientHeight - GridConfig.columnHeaderHeight - 2
-    );
-
-    this.context.lineWidth = 1;
-  }
-
-  private drawRangeSelection(
-    scrollX: number,
-    scrollY: number,
-    selection: Selection
-  ): void {
     const startRow = Math.min(selection.startRow, selection.endRow);
     const endRow = Math.max(selection.startRow, selection.endRow);
     const startColumn = Math.min(selection.startColumn, selection.endColumn);
     const endColumn = Math.max(selection.startColumn, selection.endColumn);
 
-    const startColumnBounds = this.getColumnBounds(startColumn, scrollX);
-    const endColumnBounds = this.getColumnBounds(endColumn, scrollX);
-    const startRowBounds = this.getRowBounds(startRow, scrollY);
-    const endRowBounds = this.getRowBounds(endRow, scrollY);
+    const startX = this.getColumnX(startColumn, scrollX);
+    const endX =
+      this.getColumnX(endColumn, scrollX) +
+      this.dataStore.getColumnWidth(endColumn);
 
-    if (
-      !startColumnBounds ||
-      !endColumnBounds ||
-      !startRowBounds ||
-      !endRowBounds
-    ) {
+    const startY = this.getRowY(startRow, scrollY);
+    const endY =
+      this.getRowY(endRow, scrollY) + this.dataStore.getRowHeight(endRow);
+
+    const selectionX = Math.max(startX, GridConfig.rowHeaderWidth);
+    const selectionY = Math.max(startY, GridConfig.columnHeaderHeight);
+
+    const selectionWidth =
+      Math.min(endX, this.canvas.clientWidth) - selectionX;
+
+    const selectionHeight =
+      Math.min(endY, this.canvas.clientHeight) - selectionY;
+
+    if (selectionWidth <= 0 || selectionHeight <= 0) {
       return;
     }
 
-    const rangeX = startColumnBounds.x;
-    const rangeY = startRowBounds.y;
-
-    const rangeRight = endColumnBounds.x + endColumnBounds.width;
-    const rangeBottom = endRowBounds.y + endRowBounds.height;
-
-    const rangeWidth = rangeRight - rangeX;
-    const rangeHeight = rangeBottom - rangeY;
-
-    const isVisible =
-      rangeX + rangeWidth >= GridConfig.rowHeaderWidth &&
-      rangeX <= this.canvas.clientWidth &&
-      rangeY + rangeHeight >= GridConfig.columnHeaderHeight &&
-      rangeY <= this.canvas.clientHeight;
-
-    if (!isVisible) {
-      return;
-    }
-
-    const visibleX = Math.max(rangeX, GridConfig.rowHeaderWidth);
-    const visibleY = Math.max(rangeY, GridConfig.columnHeaderHeight);
-
-    const visibleRight = Math.min(rangeRight, this.canvas.clientWidth);
-    const visibleBottom = Math.min(rangeBottom, this.canvas.clientHeight);
-
-    const visibleWidth = visibleRight - visibleX;
-    const visibleHeight = visibleBottom - visibleY;
+    this.context.save();
 
     this.context.fillStyle = GridConfig.selectedCellFillColor;
-
-    this.context.fillRect(visibleX, visibleY, visibleWidth, visibleHeight);
+    this.context.fillRect(
+      selectionX,
+      selectionY,
+      selectionWidth,
+      selectionHeight
+    );
 
     this.context.strokeStyle = GridConfig.rangeBorderColor;
     this.context.lineWidth = GridConfig.rangeBorderWidth;
-
     this.context.strokeRect(
-      visibleX + 1,
-      visibleY + 1,
-      visibleWidth - 2,
-      visibleHeight - 2
+      selectionX,
+      selectionY,
+      selectionWidth,
+      selectionHeight
     );
 
-    this.context.lineWidth = 1;
-
-    this.drawActiveCellInRange(scrollX, scrollY, selection);
-  }
-
-  private drawActiveCellInRange(
-    scrollX: number,
-    scrollY: number,
-    selection: Selection
-  ): void {
-    const columnBounds = this.getColumnBounds(selection.startColumn, scrollX);
-    const rowBounds = this.getRowBounds(selection.startRow, scrollY);
-
-    if (!columnBounds || !rowBounds) {
-      return;
-    }
-
-    const isVisible =
-      columnBounds.x + columnBounds.width >= GridConfig.rowHeaderWidth &&
-      columnBounds.x <= this.canvas.clientWidth &&
-      rowBounds.y + rowBounds.height >= GridConfig.columnHeaderHeight &&
-      rowBounds.y <= this.canvas.clientHeight;
-
-    if (!isVisible) {
-      return;
-    }
-
-    this.drawActiveCellBorder(
-      columnBounds.x,
-      rowBounds.y,
-      columnBounds.width,
-      rowBounds.height
-    );
-  }
-
-  private drawActiveCellBorder(
-    x: number,
-    y: number,
-    width: number,
-    height: number
-  ): void {
-    this.context.strokeStyle = GridConfig.activeCellBorderColor;
-    this.context.lineWidth = GridConfig.activeCellBorderWidth;
-
-    this.context.strokeRect(x + 1, y + 1, width - 2, height - 2);
-
-    this.context.lineWidth = 1;
+    this.context.restore();
   }
 
   private isColumnSelected(
@@ -648,10 +291,6 @@ export class GridRenderer {
   ): boolean {
     if (!selection) {
       return false;
-    }
-
-    if (selection.type === "column") {
-      return selection.startColumn === columnIndex;
     }
 
     const startColumn = Math.min(selection.startColumn, selection.endColumn);
@@ -665,13 +304,107 @@ export class GridRenderer {
       return false;
     }
 
-    if (selection.type === "row") {
-      return selection.startRow === rowIndex;
-    }
-
     const startRow = Math.min(selection.startRow, selection.endRow);
     const endRow = Math.max(selection.startRow, selection.endRow);
 
     return rowIndex >= startRow && rowIndex <= endRow;
+  }
+
+  private getVisibleColumns(scrollX: number): Array<{
+    columnIndex: number;
+    x: number;
+    width: number;
+  }> {
+    const columns: Array<{
+      columnIndex: number;
+      x: number;
+      width: number;
+    }> = [];
+
+    let x = GridConfig.rowHeaderWidth - scrollX;
+
+    for (
+      let columnIndex = 0;
+      columnIndex < GridConfig.totalColumns;
+      columnIndex++
+    ) {
+      const width = this.dataStore.getColumnWidth(columnIndex);
+
+      if (
+        x + width >= GridConfig.rowHeaderWidth &&
+        x <= this.canvas.clientWidth
+      ) {
+        columns.push({
+          columnIndex,
+          x,
+          width
+        });
+      }
+
+      x += width;
+
+      if (x > this.canvas.clientWidth) {
+        break;
+      }
+    }
+
+    return columns;
+  }
+
+  private getVisibleRows(scrollY: number): Array<{
+    rowIndex: number;
+    y: number;
+    height: number;
+  }> {
+    const rows: Array<{
+      rowIndex: number;
+      y: number;
+      height: number;
+    }> = [];
+
+    let y = GridConfig.columnHeaderHeight - scrollY;
+
+    for (let rowIndex = 0; rowIndex < GridConfig.totalRows; rowIndex++) {
+      const height = this.dataStore.getRowHeight(rowIndex);
+
+      if (
+        y + height >= GridConfig.columnHeaderHeight &&
+        y <= this.canvas.clientHeight
+      ) {
+        rows.push({
+          rowIndex,
+          y,
+          height
+        });
+      }
+
+      y += height;
+
+      if (y > this.canvas.clientHeight) {
+        break;
+      }
+    }
+
+    return rows;
+  }
+
+  private getColumnX(columnIndex: number, scrollX: number): number {
+    let x = GridConfig.rowHeaderWidth - scrollX;
+
+    for (let index = 0; index < columnIndex; index++) {
+      x += this.dataStore.getColumnWidth(index);
+    }
+
+    return x;
+  }
+
+  private getRowY(rowIndex: number, scrollY: number): number {
+    let y = GridConfig.columnHeaderHeight - scrollY;
+
+    for (let index = 0; index < rowIndex; index++) {
+      y += this.dataStore.getRowHeight(index);
+    }
+
+    return y;
   }
 }
