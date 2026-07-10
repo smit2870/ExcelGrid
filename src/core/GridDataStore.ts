@@ -1,5 +1,6 @@
 import { GridConfig } from "./GridConfig";
 import type { EmployeeRecord } from "../services/DataGenerator";
+import { FormulaService } from "../services/FormulaService";
 import type {
   SerializedCell,
   SerializedColumnWidth,
@@ -12,6 +13,7 @@ export class GridDataStore {
   private cells: Map<string, string | number>;
   private rowHeights: Map<number, number>;
   private columnWidths: Map<number, number>;
+  private formulaService: FormulaService;
 
   private defaultRowHeight: number;
   private defaultColumnWidth: number;
@@ -20,6 +22,7 @@ export class GridDataStore {
     this.cells = new Map<string, string | number>();
     this.rowHeights = new Map<number, number>();
     this.columnWidths = new Map<number, number>();
+    this.formulaService = new FormulaService();
 
     this.defaultRowHeight = defaultRowHeight;
     this.defaultColumnWidth = defaultColumnWidth;
@@ -30,21 +33,43 @@ export class GridDataStore {
   }
 
   getCellValue(rowIndex: number, columnIndex: number): CellValue {
+    return this.getCellRawValue(rowIndex, columnIndex);
+  }
+
+  getCellRawValue(rowIndex: number, columnIndex: number): CellValue {
     const key = this.getCellKey(rowIndex, columnIndex);
+
     return this.cells.get(key) ?? null;
+  }
+
+  getCellDisplayValue(rowIndex: number, columnIndex: number): CellValue {
+    const rawValue = this.getCellRawValue(rowIndex, columnIndex);
+
+    if (!this.formulaService.isFormula(rawValue)) {
+      return rawValue;
+    }
+
+    return this.formulaService.evaluateCell(rowIndex, columnIndex, this);
   }
 
   setCellValue(
     rowIndex: number,
     columnIndex: number,
-    value: string | number
+    value: CellValue
   ): void {
+    if (value === null || value === "") {
+      this.clearCellValue(rowIndex, columnIndex);
+      return;
+    }
+
     const key = this.getCellKey(rowIndex, columnIndex);
+
     this.cells.set(key, value);
   }
 
   clearCellValue(rowIndex: number, columnIndex: number): void {
     const key = this.getCellKey(rowIndex, columnIndex);
+
     this.cells.delete(key);
   }
 
@@ -54,6 +79,7 @@ export class GridDataStore {
 
   setRowHeight(rowIndex: number, height: number): void {
     const validHeight = Math.max(GridConfig.minRowHeight, height);
+
     this.rowHeights.set(rowIndex, validHeight);
   }
 
@@ -63,6 +89,7 @@ export class GridDataStore {
 
   setColumnWidth(columnIndex: number, width: number): void {
     const validWidth = Math.max(GridConfig.minColumnWidth, width);
+
     this.columnWidths.set(columnIndex, validWidth);
   }
 
@@ -92,6 +119,27 @@ export class GridDataStore {
       const columnIndex = Number(columnIndexText);
 
       callback(rowIndex, columnIndex, value);
+    });
+  }
+
+  forEachDisplayCell(
+    callback: (
+      rowIndex: number,
+      columnIndex: number,
+      value: CellValue
+    ) => void
+  ): void {
+    this.cells.forEach((_value, key) => {
+      const [rowIndexText, columnIndexText] = key.split(":");
+
+      const rowIndex = Number(rowIndexText);
+      const columnIndex = Number(columnIndexText);
+
+      callback(
+        rowIndex,
+        columnIndex,
+        this.getCellDisplayValue(rowIndex, columnIndex)
+      );
     });
   }
 
@@ -143,10 +191,6 @@ export class GridDataStore {
     this.cells.clear();
 
     for (const cell of cells) {
-      if (cell.value === null || cell.value === "") {
-        continue;
-      }
-
       this.setCellValue(cell.rowIndex, cell.columnIndex, cell.value);
     }
   }
