@@ -198,7 +198,14 @@ export class FormulaService {
       }
 
       return result;
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.startsWith("#")
+      ) {
+        return error.message;
+      }
+
       return "#ERROR!";
     }
   }
@@ -267,6 +274,10 @@ export class FormulaService {
           visitedCells
         );
 
+        if (this.isFormulaError(cellValue)) {
+          throw new Error(String(cellValue));
+        }
+
         const numericValue = this.toNumber(cellValue);
 
         tokens.push(String(numericValue ?? 0));
@@ -294,7 +305,7 @@ export class FormulaService {
           operatorStack.length > 0 &&
           this.isOperator(operatorStack[operatorStack.length - 1]) &&
           this.getOperatorPrecedence(operatorStack[operatorStack.length - 1]) >=
-            this.getOperatorPrecedence(token)
+          this.getOperatorPrecedence(token)
         ) {
           outputQueue.push(operatorStack.pop() as string);
         }
@@ -511,5 +522,9 @@ export class FormulaService {
 
   private getCellKey(rowIndex: number, columnIndex: number): string {
     return `${rowIndex}:${columnIndex}`;
+  }
+
+  private isFormulaError(value: FormulaResult): boolean {
+    return typeof value === "string" && value.startsWith("#");
   }
 }
