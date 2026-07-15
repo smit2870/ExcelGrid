@@ -202,6 +202,42 @@ The status bar now works with calculated formula display values.
 
 ---
 
+## Lifecycle Flow
+
+```text
+Grid created
+  -> attach event listeners
+  -> start normal grid operation
+
+Grid disposed
+  -> remove Grid-owned listeners
+  -> detach mouse and keyboard handlers
+  -> detach formula bar listeners
+  -> detach scrollbar listeners
+  -> cancel selection auto-scroll
+  -> cancel pending timers and animation frames
+```
+
+---
+
+## Lifecycle Management
+
+The grid provides explicit cleanup for browser event listeners and scheduled browser work. This prevents duplicate event handling, stale callbacks, and memory leaks when a grid instance is recreated, disposed, or replaced during Vite hot reload.
+
+Lifecycle cleanup includes:
+
+- Removing global keyboard and mouse listeners
+- Removing canvas and grid-container mouse listeners
+- Removing formula bar and name box listeners
+- Removing toolbar and import/export listeners
+- Removing custom scrollbar and active drag listeners
+- Removing the window resize listener
+- Cancelling selection auto-scroll animation frames
+- Cancelling pending navigation animation frames
+- Cancelling pending selection UI timers
+
+---
+
 ## Architecture Refactor
 
 ### Managers Created

@@ -89,6 +89,72 @@ npm run preview
 
 ---
 
+## Project Structure
+
+```text
+ExcelGrid/
+│
+├── docs/
+│   ├── Architecture.md
+│   ├── OOPsPrinciples.md
+│   ├── Summary.md
+│   └── Testing.md
+├── src/
+│   ├── commands/
+│   │   ├── CommandManager.ts
+│   │   ├── ICommand.ts
+│   │   ├── EditCellCommand.ts
+│   │   ├── ClearCellsCommand.ts
+│   │   ├── PasteCellsCommand.ts
+│   │   ├── ResizeColumnCommand.ts
+│   │   └── ResizeRowCommand.ts
+│   ├── core/
+│   │   ├── Grid.ts
+│   │   ├── GridConfig.ts
+│   │   ├── GridDataStore.ts
+│   │   └── GridRenderer.ts
+│   ├── events/
+│   │   ├── KeyboardHandler.ts
+│   │   └── MouseHandler.ts
+│   ├── managers/
+│   │   ├── CellEditingManager.ts
+│   │   ├── ClipboardManager.ts
+│   │   ├── GridScrollManager.ts
+│   │   ├── KeyboardManager.ts
+│   │   ├── MouseInteractionManager.ts
+│   │   ├── PersistenceManager.ts
+│   │   ├── SelectionManager.ts
+│   │   └── UndoRedoManager.ts
+│   ├── models/
+│   │   └── Selection.ts
+│   ├── services/
+│   │   ├── CellEditorService.ts
+│   │   ├── ClipboardService.ts
+│   │   ├── CoordinateService.ts
+│   │   ├── DataGenerator.ts
+│   │   ├── FormulaBarService.ts
+│   │   ├── FormulaService.ts
+│   │   ├── ImportExportService.ts
+│   │   ├── KeyboardNavigationService.ts
+│   │   ├── PersistenceService.ts
+│   │   ├── ResizeService.ts
+│   │   ├── ScrollBarService.ts
+│   │   ├── SelectionService.ts
+│   │   ├── SelectionStatisticsService.ts
+│   │   └── StatusBarService.ts
+│   ├── utils/
+│   │   └── CanvasUtils.ts
+│   ├── main.ts
+│   └── style.css
+├── index.html
+├── package.json
+├── tsconfig.json
+├── README.md
+└── .gitignore
+```
+
+---
+
 ## Features Implemented
 
 ### Grid and Rendering
@@ -172,73 +238,12 @@ Formula behavior:
 - JSON import
 - Clear saved data action
 
----
+### Lifecycle Management
 
-## Project Structure
-
-```text
-ExcelGrid/
-│
-├── docs/
-│   ├── Architecture.md
-│   ├── OOPsPrinciples.md
-│   ├── Summary.md
-│   └── Testing.md
-├── src/
-│   ├── commands/
-│   │   ├── CommandManager.ts
-│   │   ├── ICommand.ts
-│   │   ├── EditCellCommand.ts
-│   │   ├── ClearCellsCommand.ts
-│   │   ├── PasteCellsCommand.ts
-│   │   ├── ResizeColumnCommand.ts
-│   │   └── ResizeRowCommand.ts
-│   ├── core/
-│   │   ├── Grid.ts
-│   │   ├── GridConfig.ts
-│   │   ├── GridDataStore.ts
-│   │   └── GridRenderer.ts
-│   ├── events/
-│   │   ├── KeyboardHandler.ts
-│   │   └── MouseHandler.ts
-│   ├── managers/
-│   │   ├── CellEditingManager.ts
-│   │   ├── ClipboardManager.ts
-│   │   ├── GridScrollManager.ts
-│   │   ├── KeyboardManager.ts
-│   │   ├── MouseInteractionManager.ts
-│   │   ├── PersistenceManager.ts
-│   │   ├── SelectionManager.ts
-│   │   └── UndoRedoManager.ts
-│   ├── models/
-│   │   └── Selection.ts
-│   ├── services/
-│   │   ├── CellEditorService.ts
-│   │   ├── ClipboardService.ts
-│   │   ├── CoordinateService.ts
-│   │   ├── DataGenerator.ts
-│   │   ├── FormulaBarService.ts
-│   │   ├── FormulaService.ts
-│   │   ├── ImportExportService.ts
-│   │   ├── KeyboardNavigationService.ts
-│   │   ├── PersistenceService.ts
-│   │   ├── ResizeService.ts
-│   │   ├── ScrollBarService.ts
-│   │   ├── SelectionService.ts
-│   │   ├── SelectionStatisticsService.ts
-│   │   └── StatusBarService.ts
-│   ├── utils/
-│   │   └── CanvasUtils.ts
-│   ├── main.ts
-│   └── style.css
-├── index.html
-├── package.json
-├── tsconfig.json
-├── README.md
-└── .gitignore
-```
+- Supports safe grid disposal by removing event listeners, cancelling timers and animation frames, and preventing duplicate handlers or memory leaks when the grid is recreated.
 
 ---
+
 
 ## Documentation
 
