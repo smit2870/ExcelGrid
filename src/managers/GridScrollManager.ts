@@ -59,6 +59,10 @@ export class GridScrollManager {
     this.scrollBarService.attach();
   }
 
+  dispose(): void {
+    this.scrollBarService.detach();
+  }
+
   getScrollPosition(): ScrollPosition {
     return {
       scrollX: this.scrollX,

@@ -7,4 +7,10 @@ if (!canvas) {
   throw new Error("Grid canvas element was not found.");
 }
 
-new Grid(canvas);
+const grid = new Grid(canvas);
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    grid.dispose();
+  });
+}

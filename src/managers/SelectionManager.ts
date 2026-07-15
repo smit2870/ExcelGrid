@@ -127,6 +127,11 @@ export class SelectionManager {
     this.stopSelectionAutoScroll();
   }
 
+  dispose(): void {
+    this.isSelectingRange = false;
+    this.stopSelectionAutoScroll();
+  }
+
   selectAllData(): void {
     const usedRange = this.dataStore.getUsedRange();
 
@@ -400,23 +405,21 @@ export class SelectionManager {
     return this.coordinateService.getRowIndexFromMouseY(mouseY, scrollY);
   }
 
-  private parseNameBoxReference(
-    value: string
-  ):
+  private parseNameBoxReference(value: string):
     | {
-        type: "cell";
-        startRow: number;
-        startColumn: number;
-        endRow: number;
-        endColumn: number;
-      }
+      type: "cell";
+      startRow: number;
+      startColumn: number;
+      endRow: number;
+      endColumn: number;
+    }
     | {
-        type: "range";
-        startRow: number;
-        startColumn: number;
-        endRow: number;
-        endColumn: number;
-      }
+      type: "range";
+      startRow: number;
+      startColumn: number;
+      endRow: number;
+      endColumn: number;
+    }
     | null {
     const normalizedValue = value.trim().toUpperCase();
 
@@ -464,7 +467,10 @@ export class SelectionManager {
 
   private parseCellReference(
     value: string
-  ): { rowIndex: number; columnIndex: number } | null {
+  ): {
+    rowIndex: number;
+    columnIndex: number;
+  } | null {
     const match = value.match(/^([A-Z]+)([1-9][0-9]*)$/);
 
     if (!match) {
@@ -507,17 +513,9 @@ export class SelectionManager {
   private scrollToCell(rowIndex: number, columnIndex: number): void {
     const currentScroll = this.callbacks.getScrollPosition();
 
-    const updatedScroll = this.keyboardNavigationService.ensureCellVisible(
-      rowIndex,
-      columnIndex,
-      currentScroll.scrollX,
-      currentScroll.scrollY
-    );
+    const updatedScroll = this.keyboardNavigationService.ensureCellVisible(rowIndex, columnIndex, currentScroll.scrollX, currentScroll.scrollY);
 
-    this.callbacks.setScrollPosition(
-      updatedScroll.scrollX,
-      updatedScroll.scrollY
-    );
+    this.callbacks.setScrollPosition(updatedScroll.scrollX, updatedScroll.scrollY);
 
     this.callbacks.limitScrollPosition();
   }

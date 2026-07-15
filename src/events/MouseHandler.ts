@@ -9,6 +9,8 @@ export interface MouseHandlerCallbacks {
 export class MouseHandler {
     private canvas: HTMLCanvasElement;
     private callbacks: MouseHandlerCallbacks;
+    private gridContainer: HTMLElement | null;
+    private isAttached: boolean;
 
     constructor(
         canvas: HTMLCanvasElement,
@@ -16,31 +18,65 @@ export class MouseHandler {
     ) {
         this.canvas = canvas;
         this.callbacks = callbacks;
+
+        this.gridContainer = null;
+        this.isAttached = false;
     }
 
     attach(): void {
-        const gridContainer = this.canvas.parentElement;
-
-        if (gridContainer) {
-            gridContainer.addEventListener("wheel", (event: WheelEvent) => {
-                this.callbacks.onWheel(event);
-            });
+        if (this.isAttached) {
+            return;
         }
 
-        this.canvas.addEventListener("mousedown", (event: MouseEvent) => {
-            this.callbacks.onMouseDown(event);
-        });
+        this.gridContainer = this.canvas.parentElement;
 
-        this.canvas.addEventListener("mousemove", (event: MouseEvent) => {
-            this.callbacks.onMouseMove(event);
-        });
+        if (this.gridContainer) {
+            this.gridContainer.addEventListener("wheel", this.handleWheel);
+        }
 
-        this.canvas.addEventListener("dblclick", (event: MouseEvent) => {
-            this.callbacks.onDoubleClick(event);
-        });
+        this.canvas.addEventListener("mousedown", this.handleMouseDown);
+        this.canvas.addEventListener("mousemove", this.handleMouseMove);
+        this.canvas.addEventListener("dblclick", this.handleDoubleClick);
+        window.addEventListener("mouseup", this.handleMouseUp);
 
-        window.addEventListener("mouseup", () => {
-            this.callbacks.onMouseUp();
-        });
+        this.isAttached = true;
     }
+
+    detach(): void {
+        if (!this.isAttached) {
+            return;
+        }
+
+        if (this.gridContainer) {
+            this.gridContainer.removeEventListener("wheel", this.handleWheel);
+        }
+
+        this.canvas.removeEventListener("mousedown", this.handleMouseDown);
+        this.canvas.removeEventListener("mousemove", this.handleMouseMove);
+        this.canvas.removeEventListener("dblclick", this.handleDoubleClick);
+        window.removeEventListener("mouseup", this.handleMouseUp);
+
+        this.gridContainer = null;
+        this.isAttached = false;
+    }
+
+    private handleWheel = (event: WheelEvent): void => {
+        this.callbacks.onWheel(event);
+    };
+
+    private handleMouseDown = (event: MouseEvent): void => {
+        this.callbacks.onMouseDown(event);
+    };
+
+    private handleMouseMove = (event: MouseEvent): void => {
+        this.callbacks.onMouseMove(event);
+    };
+
+    private handleDoubleClick = (event: MouseEvent): void => {
+        this.callbacks.onDoubleClick(event);
+    };
+
+    private handleMouseUp = (): void => {
+        this.callbacks.onMouseUp();
+    };
 }

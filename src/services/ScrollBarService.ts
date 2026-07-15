@@ -29,10 +29,19 @@ export class ScrollBarService {
 
     private onScroll: (scrollX: number, scrollY: number) => void;
 
+    private isAttached: boolean;
+
+    private activeHorizontalMouseMove: | ((event: MouseEvent) => void) | null;
+
+    private activeHorizontalMouseUp: | (() => void) | null;
+
+    private activeVerticalMouseMove: | ((event: MouseEvent) => void) | null;
+
+    private activeVerticalMouseUp: | (() => void) | null;
+
     constructor(
         elements: ScrollBarElements,
-        onScroll: (scrollX: number, scrollY: number) => void
-    ) {
+        onScroll: (scrollX: number, scrollY: number) => void) {
         this.horizontalTrack = elements.horizontalTrack;
         this.horizontalThumb = elements.horizontalThumb;
         this.verticalTrack = elements.verticalTrack;
@@ -44,13 +53,52 @@ export class ScrollBarService {
         this.maxScrollY = 0;
 
         this.onScroll = onScroll;
+
+        this.isAttached = false;
+
+        this.activeHorizontalMouseMove = null;
+        this.activeHorizontalMouseUp = null;
+
+        this.activeVerticalMouseMove = null;
+        this.activeVerticalMouseUp = null;
     }
 
     attach(): void {
+        if (this.isAttached) {
+            return;
+        }
+
         this.attachHorizontalThumbDrag();
         this.attachVerticalThumbDrag();
         this.attachHorizontalTrackClick();
         this.attachVerticalTrackClick();
+
+        this.isAttached = true;
+    }
+
+    detach(): void {
+        if (this.isAttached) {
+            if (this.horizontalThumb) {
+                this.horizontalThumb.removeEventListener("mousedown", this.handleHorizontalThumbMouseDown);
+            }
+
+            if (this.verticalThumb) {
+                this.verticalThumb.removeEventListener("mousedown", this.handleVerticalThumbMouseDown);
+            }
+
+            if (this.horizontalTrack) {
+                this.horizontalTrack.removeEventListener("mousedown", this.handleHorizontalTrackMouseDown);
+            }
+
+            if (this.verticalTrack) {
+                this.verticalTrack.removeEventListener("mousedown", this.handleVerticalTrackMouseDown);
+            }
+
+            this.isAttached = false;
+        }
+
+        this.detachHorizontalDragListeners();
+        this.detachVerticalDragListeners();
     }
 
     update(options: ScrollBarUpdateOptions): void {
@@ -95,20 +143,8 @@ export class ScrollBarService {
         }
 
         this.horizontalThumb.style.display = "block";
-
-        const thumbWidth = this.getThumbSize(
-            trackWidth,
-            viewportWidth,
-            viewportWidth + this.maxScrollX
-        );
-
-        const thumbLeft = this.getThumbPosition(
-            this.scrollX,
-            this.maxScrollX,
-            trackWidth,
-            thumbWidth
-        );
-
+        const thumbWidth = this.getThumbSize(trackWidth, viewportWidth, viewportWidth + this.maxScrollX);
+        const thumbLeft = this.getThumbPosition(this.scrollX, this.maxScrollX, trackWidth, thumbWidth);
         this.horizontalThumb.style.width = `${thumbWidth}px`;
         this.horizontalThumb.style.left = `${thumbLeft}px`;
     }
@@ -127,52 +163,29 @@ export class ScrollBarService {
 
         this.verticalThumb.style.display = "block";
 
-        const thumbHeight = this.getThumbSize(
-            trackHeight,
-            viewportHeight,
-            viewportHeight + this.maxScrollY
-        );
-
-        const thumbTop = this.getThumbPosition(
-            this.scrollY,
-            this.maxScrollY,
-            trackHeight,
-            thumbHeight
-        );
+        const thumbHeight = this.getThumbSize(trackHeight, viewportHeight, viewportHeight + this.maxScrollY);
+        const thumbTop = this.getThumbPosition(this.scrollY, this.maxScrollY, trackHeight, thumbHeight);
 
         this.verticalThumb.style.height = `${thumbHeight}px`;
         this.verticalThumb.style.top = `${thumbTop}px`;
     }
 
-    private getThumbSize(
-        trackSize: number,
-        viewportSize: number,
-        contentSize: number
-    ): number {
+    private getThumbSize(trackSize: number, viewportSize: number, contentSize: number): number {
         const minimumThumbSize = 24;
 
         if (contentSize <= 0) {
             return trackSize;
         }
 
-        return Math.max(
-            minimumThumbSize,
-            (viewportSize / contentSize) * trackSize
-        );
+        return Math.max(minimumThumbSize, (viewportSize / contentSize) * trackSize);
     }
 
-    private getThumbPosition(
-        scrollPosition: number,
-        maxScrollPosition: number,
-        trackSize: number,
-        thumbSize: number
-    ): number {
+    private getThumbPosition(scrollPosition: number, maxScrollPosition: number, trackSize: number, thumbSize: number): number {
         if (maxScrollPosition <= 0) {
             return 0;
         }
 
         const availableTrackSize = trackSize - thumbSize;
-
         return (scrollPosition / maxScrollPosition) * availableTrackSize;
     }
 
@@ -180,45 +193,7 @@ export class ScrollBarService {
         if (!this.horizontalTrack || !this.horizontalThumb) {
             return;
         }
-
-        this.horizontalThumb.addEventListener("mousedown", (event: MouseEvent) => {
-            event.preventDefault();
-
-            const startMouseX = event.clientX;
-            const startScrollX = this.scrollX;
-
-            const onMouseMove = (moveEvent: MouseEvent): void => {
-                if (!this.horizontalTrack || !this.horizontalThumb) {
-                    return;
-                }
-
-                const trackWidth = this.horizontalTrack.clientWidth;
-                const thumbWidth = this.horizontalThumb.clientWidth;
-                const availableTrackWidth = trackWidth - thumbWidth;
-
-                if (availableTrackWidth <= 0) {
-                    return;
-                }
-
-                const deltaX = moveEvent.clientX - startMouseX;
-                const scrollDelta = (deltaX / availableTrackWidth) * this.maxScrollX;
-
-                const nextScrollX = Math.max(
-                    0,
-                    Math.min(this.maxScrollX, startScrollX + scrollDelta)
-                );
-
-                this.onScroll(nextScrollX, this.scrollY);
-            };
-
-            const onMouseUp = (): void => {
-                window.removeEventListener("mousemove", onMouseMove);
-                window.removeEventListener("mouseup", onMouseUp);
-            };
-
-            window.addEventListener("mousemove", onMouseMove);
-            window.addEventListener("mouseup", onMouseUp);
-        });
+        this.horizontalThumb.addEventListener("mousedown", this.handleHorizontalThumbMouseDown);
     }
 
     private attachVerticalThumbDrag(): void {
@@ -226,44 +201,7 @@ export class ScrollBarService {
             return;
         }
 
-        this.verticalThumb.addEventListener("mousedown", (event: MouseEvent) => {
-            event.preventDefault();
-
-            const startMouseY = event.clientY;
-            const startScrollY = this.scrollY;
-
-            const onMouseMove = (moveEvent: MouseEvent): void => {
-                if (!this.verticalTrack || !this.verticalThumb) {
-                    return;
-                }
-
-                const trackHeight = this.verticalTrack.clientHeight;
-                const thumbHeight = this.verticalThumb.clientHeight;
-                const availableTrackHeight = trackHeight - thumbHeight;
-
-                if (availableTrackHeight <= 0) {
-                    return;
-                }
-
-                const deltaY = moveEvent.clientY - startMouseY;
-                const scrollDelta = (deltaY / availableTrackHeight) * this.maxScrollY;
-
-                const nextScrollY = Math.max(
-                    0,
-                    Math.min(this.maxScrollY, startScrollY + scrollDelta)
-                );
-
-                this.onScroll(this.scrollX, nextScrollY);
-            };
-
-            const onMouseUp = (): void => {
-                window.removeEventListener("mousemove", onMouseMove);
-                window.removeEventListener("mouseup", onMouseUp);
-            };
-
-            window.addEventListener("mousemove", onMouseMove);
-            window.addEventListener("mouseup", onMouseUp);
-        });
+        this.verticalThumb.addEventListener("mousedown", this.handleVerticalThumbMouseDown);
     }
 
     private attachHorizontalTrackClick(): void {
@@ -271,17 +209,33 @@ export class ScrollBarService {
             return;
         }
 
-        this.horizontalTrack.addEventListener("mousedown", (event: MouseEvent) => {
-            if (event.target === this.horizontalThumb) {
-                return;
-            }
+        this.horizontalTrack.addEventListener("mousedown", this.handleHorizontalTrackMouseDown);
+    }
 
+    private attachVerticalTrackClick(): void {
+        if (!this.verticalTrack) {
+            return;
+        }
+
+        this.verticalTrack.addEventListener("mousedown", this.handleVerticalTrackMouseDown);
+    }
+
+    private handleHorizontalThumbMouseDown = (event: MouseEvent): void => {
+        if (!this.horizontalTrack || !this.horizontalThumb) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const startMouseX = event.clientX;
+        const startScrollX = this.scrollX;
+
+        this.detachHorizontalDragListeners();
+
+        const onMouseMove = (moveEvent: MouseEvent): void => {
             if (!this.horizontalTrack || !this.horizontalThumb) {
                 return;
             }
-
-            const rect = this.horizontalTrack.getBoundingClientRect();
-            const clickX = event.clientX - rect.left;
 
             const trackWidth = this.horizontalTrack.clientWidth;
             const thumbWidth = this.horizontalThumb.clientWidth;
@@ -291,32 +245,40 @@ export class ScrollBarService {
                 return;
             }
 
-            const nextScrollX =
-                (clickX / trackWidth) * this.maxScrollX;
+            const deltaX = moveEvent.clientX - startMouseX;
+            const scrollDelta = (deltaX / availableTrackWidth) * this.maxScrollX;
+            const nextScrollX = Math.max(0, Math.min(this.maxScrollX, startScrollX + scrollDelta));
 
-            this.onScroll(
-                Math.max(0, Math.min(this.maxScrollX, nextScrollX)),
-                this.scrollY
-            );
-        });
-    }
+            this.onScroll(nextScrollX, this.scrollY);
+        };
 
-    private attachVerticalTrackClick(): void {
-        if (!this.verticalTrack) {
+        const onMouseUp = (): void => {
+            this.detachHorizontalDragListeners();
+        };
+
+        this.activeHorizontalMouseMove = onMouseMove;
+        this.activeHorizontalMouseUp = onMouseUp;
+
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
+    };
+
+    private handleVerticalThumbMouseDown = (event: MouseEvent): void => {
+        if (!this.verticalTrack || !this.verticalThumb) {
             return;
         }
 
-        this.verticalTrack.addEventListener("mousedown", (event: MouseEvent) => {
-            if (event.target === this.verticalThumb) {
-                return;
-            }
+        event.preventDefault();
 
+        const startMouseY = event.clientY;
+        const startScrollY = this.scrollY;
+
+        this.detachVerticalDragListeners();
+
+        const onMouseMove = (moveEvent: MouseEvent): void => {
             if (!this.verticalTrack || !this.verticalThumb) {
                 return;
             }
-
-            const rect = this.verticalTrack.getBoundingClientRect();
-            const clickY = event.clientY - rect.top;
 
             const trackHeight = this.verticalTrack.clientHeight;
             const thumbHeight = this.verticalThumb.clientHeight;
@@ -326,13 +288,92 @@ export class ScrollBarService {
                 return;
             }
 
-            const nextScrollY =
-                (clickY / trackHeight) * this.maxScrollY;
-
-            this.onScroll(
-                this.scrollX,
-                Math.max(0, Math.min(this.maxScrollY, nextScrollY))
+            const deltaY = moveEvent.clientY - startMouseY;
+            const scrollDelta = (deltaY / availableTrackHeight) * this.maxScrollY;
+            const nextScrollY = Math.max(0, Math.min(this.maxScrollY, startScrollY + scrollDelta)
             );
-        });
+
+            this.onScroll(this.scrollX, nextScrollY);
+        };
+
+        const onMouseUp = (): void => {
+            this.detachVerticalDragListeners();
+        };
+
+        this.activeVerticalMouseMove = onMouseMove;
+        this.activeVerticalMouseUp = onMouseUp;
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
+    };
+
+    private handleHorizontalTrackMouseDown = (event: MouseEvent): void => {
+        if (event.target === this.horizontalThumb) {
+            return;
+        }
+
+        if (!this.horizontalTrack || !this.horizontalThumb) {
+            return;
+        }
+
+        const rect = this.horizontalTrack.getBoundingClientRect();
+
+        const clickX = event.clientX - rect.left;
+        const trackWidth = this.horizontalTrack.clientWidth;
+        const thumbWidth = this.horizontalThumb.clientWidth;
+        const availableTrackWidth = trackWidth - thumbWidth;
+
+        if (availableTrackWidth <= 0) {
+            return;
+        }
+
+        const nextScrollX = (clickX / trackWidth) * this.maxScrollX;
+        this.onScroll(Math.max(0, Math.min(this.maxScrollX, nextScrollX)), this.scrollY);
+    };
+
+    private handleVerticalTrackMouseDown = (event: MouseEvent): void => {
+        if (event.target === this.verticalThumb) {
+            return;
+        }
+
+        if (!this.verticalTrack || !this.verticalThumb) {
+            return;
+        }
+
+        const rect = this.verticalTrack.getBoundingClientRect();
+        const clickY = event.clientY - rect.top;
+        const trackHeight = this.verticalTrack.clientHeight;
+        const thumbHeight = this.verticalThumb.clientHeight;
+        const availableTrackHeight = trackHeight - thumbHeight;
+
+        if (availableTrackHeight <= 0) {
+            return;
+        }
+
+        const nextScrollY = (clickY / trackHeight) * this.maxScrollY;
+        this.onScroll(this.scrollX, Math.max(0, Math.min(this.maxScrollY, nextScrollY)));
+    };
+
+    private detachHorizontalDragListeners(): void {
+        if (this.activeHorizontalMouseMove) {
+            window.removeEventListener("mousemove", this.activeHorizontalMouseMove);
+            this.activeHorizontalMouseMove = null;
+        }
+
+        if (this.activeHorizontalMouseUp) {
+            window.removeEventListener("mouseup", this.activeHorizontalMouseUp);
+            this.activeHorizontalMouseUp = null;
+        }
+    }
+
+    private detachVerticalDragListeners(): void {
+        if (this.activeVerticalMouseMove) {
+            window.removeEventListener("mousemove", this.activeVerticalMouseMove);
+            this.activeVerticalMouseMove = null;
+        }
+
+        if (this.activeVerticalMouseUp) {
+            window.removeEventListener("mouseup", this.activeVerticalMouseUp);
+            this.activeVerticalMouseUp = null;
+        }
     }
 }
