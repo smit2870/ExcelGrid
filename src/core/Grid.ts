@@ -378,6 +378,7 @@ export class Grid {
     this.mouseHandler.detach();
     this.keyboardHandler.detach();
 
+    this.mouseInteractionManager.dispose();
     this.formulaBarService.detach();
     this.gridScrollManager.dispose();
     this.selectionManager.dispose();
