@@ -90,6 +90,11 @@ export class GridRenderer {
     }
 
     const text = String(value);
+    const lines = text.split(/\r?\n/);
+
+    const horizontalPadding = 6;
+    const verticalPadding = 4;
+    const lineHeight = 16;
 
     this.context.save();
 
@@ -100,9 +105,17 @@ export class GridRenderer {
     this.context.fillStyle = GridConfig.cellTextColor;
     this.context.font = GridConfig.font;
     this.context.textAlign = "left";
-    this.context.textBaseline = "middle";
+    this.context.textBaseline = "top";
 
-    this.context.fillText(text, x + 6, y + height / 2);
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const lineY = y + verticalPadding + lineIndex * lineHeight;
+
+      if (lineY >= y + height) {
+        break;
+      }
+
+      this.context.fillText(lines[lineIndex] ?? "", x + horizontalPadding, lineY);
+    }
 
     this.context.restore();
   }
