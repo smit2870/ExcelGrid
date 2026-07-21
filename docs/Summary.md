@@ -240,6 +240,14 @@ Lifecycle cleanup includes:
 
 ## Architecture Refactor
 
+### Interaction State Pattern
+
+- Added a formal State design pattern for mouse interactions.
+- Added explicit idle, selecting, row-resizing, column-resizing, and disposed states.
+- `MouseInteractionManager` now acts as the state context and delegates events to the active state.
+- Preserved existing selection and resize calculations by delegating to `SelectionManager` and `ResizeService`.
+- Made interaction transitions easier to understand and extend.
+
 ### Managers Created
 
 ```text

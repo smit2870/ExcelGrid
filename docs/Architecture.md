@@ -960,3 +960,51 @@ Min: -
 Max: -
 ```
 
+---
+
+---
+
+## 7. Interaction State Design Pattern
+
+Mouse interaction routing now follows the State design pattern. `MouseInteractionManager` acts as the context and delegates mouse events to the active interaction state instead of checking multiple resize and selection flags in every handler.
+
+The interaction states are:
+
+```text
+IdleInteractionState
+SelectingInteractionState
+ColumnResizeInteractionState
+RowResizeInteractionState
+DisposedInteractionState
+```
+
+### State responsibilities
+
+- `IdleInteractionState` detects resize borders, updates hover cursors, handles row and column header selection, clears selection from the top-left corner, starts range selection, and handles cell double-click editing.
+- `SelectingInteractionState` updates the selected range during mouse movement and returns to idle after mouse release.
+- `ColumnResizeInteractionState` updates column width while dragging, completes the resize command on mouse release, refreshes the resize UI, saves state, and returns to idle.
+- `RowResizeInteractionState` performs the equivalent workflow for row height.
+- `DisposedInteractionState` ignores further interaction after the grid is disposed.
+
+### State transitions
+
+```text
+Idle
+  -> Selecting on cell mouse down
+  -> Column Resizing on column-border mouse down
+  -> Row Resizing on row-border mouse down
+  -> Disposed when the grid is disposed
+
+Selecting
+  -> Idle on mouse up
+
+Column Resizing
+  -> Idle on mouse up
+
+Row Resizing
+  -> Idle on mouse up
+```
+
+The state classes do not reimplement selection or resizing calculations. They delegate to the existing `SelectionManager`, `ResizeService`, `GridScrollManager`, and application callbacks. This keeps the behavior unchanged while making interaction modes and transitions explicit.
+
+

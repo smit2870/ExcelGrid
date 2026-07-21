@@ -142,6 +142,14 @@ ExcelGrid/
 │   │   ├── SelectionService.ts
 │   │   ├── SelectionStatisticsService.ts
 │   │   └── StatusBarService.ts
+│   ├── states/
+│   │   ├── ColumnResizeInteractionState.ts
+│   │   ├── DisposedInteractionState.ts
+│   │   ├── GridInteractionState.ts
+│   │   ├── GridInteractionContext.ts
+│   │   ├── IdleInteractionState.ts
+│   │   ├── RowResizeInteractionState.ts
+│   │   └── SelectingInteractionState.ts
 │   ├── utils/
 │   │   └── CanvasUtils.ts
 │   ├── main.ts
@@ -241,6 +249,10 @@ Formula behavior:
 ### Lifecycle Management
 
 - Supports safe grid disposal by removing event listeners, cancelling timers and animation frames, and preventing duplicate handlers or memory leaks when the grid is recreated.
+
+### State-based interactions:
+
+- Mouse selection, row resizing, column resizing, idle behavior, and disposed behavior are represented by dedicated interaction state classes.
 
 ---
 

@@ -123,6 +123,32 @@ ResizeRowCommand
 
 ---
 
+## State Design Pattern
+
+The mouse interaction workflow uses the State design pattern.
+
+`MouseInteractionManager` is the context. It stores the current `GridInteractionState` and forwards mouse-down, mouse-move, mouse-up, and double-click events to that state.
+
+```ts
+this.currentState.handleMouseMove(this, event);
+```
+
+Concrete states encapsulate behavior for different interaction modes:
+
+```text
+IdleInteractionState
+SelectingInteractionState
+ColumnResizeInteractionState
+RowResizeInteractionState
+DisposedInteractionState
+```
+
+State transitions are explicit. For example, pressing a column resize border changes the context from idle to column resizing. Releasing the mouse completes the resize and changes the context back to idle.
+
+This applies polymorphism because every concrete state implements the same `GridInteractionState` interface. It also supports the Open/Closed Principle because a new interaction mode can be added as another state class without adding more conditional branches to every mouse handler.
+
+---
+
 ## SOLID Principles
 
 ---
