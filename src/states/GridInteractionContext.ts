@@ -9,11 +9,8 @@ export interface GridInteractionContext {
   changeState(state: GridInteractionState): void;
 
   createIdleState(): GridInteractionState;
-
   createSelectingState(): GridInteractionState;
-
   createColumnResizeState(): GridInteractionState;
-
   createRowResizeState(): GridInteractionState;
 
   getMousePosition(event: MouseEvent): MousePosition;
@@ -36,7 +33,6 @@ export interface GridInteractionContext {
   ): void;
 
   updateColumnResize(mouseX: number): void;
-
   finishColumnResize(): void;
 
   startRowResize(
@@ -45,19 +41,17 @@ export interface GridInteractionContext {
   ): void;
 
   updateRowResize(mouseY: number): void;
-
   finishRowResize(): void;
 
   clearSelection(): void;
 
   selectColumnFromHeader(mouseX: number): void;
-
   selectRowFromHeader(mouseY: number): void;
 
   startRangeSelection(
     mouseX: number,
     mouseY: number
-  ): void;
+  ): boolean;
 
   updateRangeSelection(
     mouseX: number,
@@ -65,7 +59,6 @@ export interface GridInteractionContext {
   ): void;
 
   finishRangeSelection(): void;
-
   cancelSelection(): void;
 
   handleCellDoubleClick(
@@ -74,9 +67,7 @@ export interface GridInteractionContext {
   ): void;
 
   updateResizeUi(): void;
-
   savePersistedState(): void;
-
   setCursor(cursor: string): void;
 
   isTopLeftCorner(
